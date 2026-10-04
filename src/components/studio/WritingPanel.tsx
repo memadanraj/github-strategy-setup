@@ -43,6 +43,15 @@ export function WritingPanel({ project, onScenesChanged }: { project: Tables<"pr
   const [hook, setHook] = useState<string | null>(null);
   const [script, setScript] = useState("");
   useEffect(() => { setScript(writing?.script ?? ""); }, [writing?.script]);
+  const [idea, setIdea] = useState(project.idea ?? "");
+  useEffect(() => { setIdea(project.idea ?? ""); }, [project.idea]);
+
+  async function saveIdea() {
+    const { error } = await supabase.from("projects").update({ idea: idea.trim() }).eq("id", project.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Idea saved");
+    qc.invalidateQueries({ queryKey: ["project", project.id] });
+  }
 
   async function run(slug: Slug, success: string) {
     if (slug === "script_to_scenes" && !confirm("Replace all current scenes with a breakdown of this script?")) return;
@@ -94,6 +103,12 @@ export function WritingPanel({ project, onScenesChanged }: { project: Tables<"pr
 
   return (
     <div className="space-y-8">
+      <Section n="00" title="Video idea" action={
+        <Button variant="panel" size="sm" disabled={idea === (project.idea ?? "")} onClick={saveIdea}>Save idea</Button>
+      }>
+        <Textarea value={idea} onChange={(e) => setIdea(e.target.value)} rows={3}
+          placeholder="What is this video about? e.g. 'Why octopuses are smarter than we think'" />
+      </Section>
       <Section n="01" title="Topic research" action={<AiBtn slug="topic_research" label={research ? "Redo research" : "Research topic"} icon={Search} success="Research ready" />}>
         {research ? (
           <div className="grid gap-4 md:grid-cols-2">
