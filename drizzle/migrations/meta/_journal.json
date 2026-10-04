@@ -57,6 +57,13 @@
       "when": 1791101937411,
       "tag": "0007_default_creator_plan",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791102037900,
+      "tag": "0008_audio_timeline_rendering",
+      "breakpoints": true
     }
   ]
 }
