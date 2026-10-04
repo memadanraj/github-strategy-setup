@@ -57,6 +57,7 @@ export function WritingPanel({ project, onScenesChanged }: { project: Tables<"pr
     if (slug === "script_to_scenes" && !confirm("Replace all current scenes with a breakdown of this script?")) return;
     setBusy(slug);
     try {
+      if (idea.trim() !== (project.idea ?? "")) await saveIdea();
       if (slug === "script_to_scenes" && script !== (writing?.script ?? "")) await saveScript(true);
       const res = slug === "full_script"
         ? await fns.full_script({ data: { projectId: project.id, hook: hook ?? undefined } })
