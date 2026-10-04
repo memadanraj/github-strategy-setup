@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790930559122,
+      "tag": "0000_migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790999807505,
+      "tag": "0001_project_engine",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791000632594,
+      "tag": "0002_noop_apply_pending",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791000739197,
+      "tag": "0003_ai_gateway_credit_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791000945251,
+      "tag": "0004_writing_suite",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791008295821,
+      "tag": "0005_apply_pending",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791008553783,
+      "tag": "0006_visuals_studio",
+      "breakpoints": true
+    }
+  ]
+}
