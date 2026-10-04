@@ -10,33 +10,131 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as AuthenticatedStudioRouteRouteImport } from './routes/_authenticated/_studio/route'
+import { Route as AuthenticatedStudioDashboardRouteImport } from './routes/_authenticated/_studio/dashboard'
+import { Route as AuthenticatedStudioSettingsRouteImport } from './routes/_authenticated/_studio/settings'
+import { Route as AuthenticatedStudioProjectsIndexRouteImport } from './routes/_authenticated/_studio/projects.index'
+import { Route as AuthenticatedStudioProjectsProjectIdRouteImport } from './routes/_authenticated/_studio/projects.$projectId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedStudioRouteRoute =
+  AuthenticatedStudioRouteRouteImport.update({
+    id: '/_studio',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedStudioDashboardRoute =
+  AuthenticatedStudioDashboardRouteImport.update({
+    id: '/dashboard',
+    path: '/dashboard',
+    getParentRoute: () => AuthenticatedStudioRouteRoute,
+  } as any)
+const AuthenticatedStudioSettingsRoute =
+  AuthenticatedStudioSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedStudioRouteRoute,
+  } as any)
+const AuthenticatedStudioProjectsIndexRoute =
+  AuthenticatedStudioProjectsIndexRouteImport.update({
+    id: '/projects/',
+    path: '/projects/',
+    getParentRoute: () => AuthenticatedStudioRouteRoute,
+  } as any)
+const AuthenticatedStudioProjectsProjectIdRoute =
+  AuthenticatedStudioProjectsProjectIdRouteImport.update({
+    id: '/projects/$projectId',
+    path: '/projects/$projectId',
+    getParentRoute: () => AuthenticatedStudioRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/dashboard': typeof AuthenticatedStudioDashboardRoute
+  '/settings': typeof AuthenticatedStudioSettingsRoute
+  '/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
+  '/projects/': typeof AuthenticatedStudioProjectsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/dashboard': typeof AuthenticatedStudioDashboardRoute
+  '/settings': typeof AuthenticatedStudioSettingsRoute
+  '/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
+  '/projects': typeof AuthenticatedStudioProjectsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/_studio': typeof AuthenticatedStudioRouteRouteWithChildren
+  '/_authenticated/_studio/dashboard': typeof AuthenticatedStudioDashboardRoute
+  '/_authenticated/_studio/settings': typeof AuthenticatedStudioSettingsRoute
+  '/_authenticated/_studio/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
+  '/_authenticated/_studio/projects/': typeof AuthenticatedStudioProjectsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/reset-password'
+    | '/dashboard'
+    | '/settings'
+    | '/projects/$projectId'
+    | '/projects/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/reset-password'
+    | '/dashboard'
+    | '/settings'
+    | '/projects/$projectId'
+    | '/projects'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/reset-password'
+    | '/_authenticated/_studio'
+    | '/_authenticated/_studio/dashboard'
+    | '/_authenticated/_studio/settings'
+    | '/_authenticated/_studio/projects/$projectId'
+    | '/_authenticated/_studio/projects/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +146,103 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/_studio': {
+      id: '/_authenticated/_studio'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedStudioRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/_studio/dashboard': {
+      id: '/_authenticated/_studio/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedStudioDashboardRouteImport
+      parentRoute: typeof AuthenticatedStudioRouteRoute
+    }
+    '/_authenticated/_studio/settings': {
+      id: '/_authenticated/_studio/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedStudioSettingsRouteImport
+      parentRoute: typeof AuthenticatedStudioRouteRoute
+    }
+    '/_authenticated/_studio/projects/': {
+      id: '/_authenticated/_studio/projects/'
+      path: '/projects'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof AuthenticatedStudioProjectsIndexRouteImport
+      parentRoute: typeof AuthenticatedStudioRouteRoute
+    }
+    '/_authenticated/_studio/projects/$projectId': {
+      id: '/_authenticated/_studio/projects/$projectId'
+      path: '/projects/$projectId'
+      fullPath: '/projects/$projectId'
+      preLoaderRoute: typeof AuthenticatedStudioProjectsProjectIdRouteImport
+      parentRoute: typeof AuthenticatedStudioRouteRoute
+    }
   }
 }
 
+interface AuthenticatedStudioRouteRouteChildren {
+  AuthenticatedStudioDashboardRoute: typeof AuthenticatedStudioDashboardRoute
+  AuthenticatedStudioSettingsRoute: typeof AuthenticatedStudioSettingsRoute
+  AuthenticatedStudioProjectsProjectIdRoute: typeof AuthenticatedStudioProjectsProjectIdRoute
+  AuthenticatedStudioProjectsIndexRoute: typeof AuthenticatedStudioProjectsIndexRoute
+}
+
+const AuthenticatedStudioRouteRouteChildren: AuthenticatedStudioRouteRouteChildren =
+  {
+    AuthenticatedStudioDashboardRoute: AuthenticatedStudioDashboardRoute,
+    AuthenticatedStudioSettingsRoute: AuthenticatedStudioSettingsRoute,
+    AuthenticatedStudioProjectsProjectIdRoute:
+      AuthenticatedStudioProjectsProjectIdRoute,
+    AuthenticatedStudioProjectsIndexRoute:
+      AuthenticatedStudioProjectsIndexRoute,
+  }
+
+const AuthenticatedStudioRouteRouteWithChildren =
+  AuthenticatedStudioRouteRoute._addFileChildren(
+    AuthenticatedStudioRouteRouteChildren,
+  )
+
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedStudioRouteRoute: typeof AuthenticatedStudioRouteRouteWithChildren
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedStudioRouteRoute: AuthenticatedStudioRouteRouteWithChildren,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
