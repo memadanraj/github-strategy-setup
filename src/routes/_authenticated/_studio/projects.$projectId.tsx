@@ -11,6 +11,7 @@ import { VisualsPanel } from "@/components/studio/VisualsPanel";
 import { AudioPanel } from "@/components/studio/AudioPanel";
 import { TimelinePanel } from "@/components/studio/TimelinePanel";
 import { RenderPanel } from "@/components/studio/RenderPanel";
+import { ThumbnailPanel } from "@/components/studio/ThumbnailPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -62,7 +63,7 @@ const versionsQ = (id: string) => queryOptions({
   },
 });
 
-type Tab = "writing" | "scenes" | "visuals" | "audio" | "timeline" | "render" | "assets" | "versions";
+type Tab = "writing" | "scenes" | "visuals" | "audio" | "timeline" | "thumbnail" | "render" | "assets" | "versions";
 
 function ProjectPage() {
   const { projectId } = Route.useParams();
@@ -86,7 +87,7 @@ function ProjectPage() {
       </div>
       {project.idea && <p className="mt-3 max-w-2xl text-muted-foreground">{project.idea}</p>}
       <div className="mt-6 flex gap-1 border-b border-border">
-        {(["writing", "scenes", "visuals", "audio", "timeline", "render", "assets", "versions"] as Tab[]).map((t) => (
+        {(["writing", "scenes", "visuals", "audio", "timeline", "thumbnail", "render", "assets", "versions"] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm capitalize ${tab === t ? "border-signal text-foreground" : "border-transparent text-muted-foreground"}`}>
             {t}
@@ -99,6 +100,7 @@ function ProjectPage() {
         {tab === "visuals" && <VisualsPanel project={project} />}
         {tab === "audio" && <AudioPanel project={project} />}
         {tab === "timeline" && <TimelinePanel project={project} />}
+        {tab === "thumbnail" && <ThumbnailPanel project={project} />}
         {tab === "render" && <RenderPanel project={project} />}
         {tab === "assets" && <Assets project={project} />}
         {tab === "versions" && <Versions project={project} />}

@@ -64,6 +64,13 @@
       "when": 1791102037900,
       "tag": "0008_audio_timeline_rendering",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791102653523,
+      "tag": "0009_thumbnail_tasks",
+      "breakpoints": true
     }
   ]
 }
