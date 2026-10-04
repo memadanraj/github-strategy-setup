@@ -21,7 +21,8 @@ async function loadProject(supabase: any, projectId: string) {
   const { data: project } = await supabase.from("projects").select("id,title,idea,format").eq("id", projectId).maybeSingle();
   if (!project) return null;
   const { data: writing } = await supabase.from("project_writing").select("*").eq("project_id", projectId).maybeSingle();
-  const idea = ((project.idea as string) || (project.title as string) || "").trim();
+  const rawTitle = ((project.title as string) || "").trim();
+  const idea = ((project.idea as string) || (rawTitle === "Untitled project" ? "" : rawTitle)).trim();
   return { project, writing, idea, short: project.format === "short" };
 }
 
