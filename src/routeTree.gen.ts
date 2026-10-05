@@ -192,6 +192,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/youtube/callback': {
+      id: '/youtube/callback'
+      path: '/youtube/callback'
+      fullPath: '/youtube/callback'
+      preLoaderRoute: typeof YoutubeCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/_studio': {
       id: '/_authenticated/_studio'
       path: ''
