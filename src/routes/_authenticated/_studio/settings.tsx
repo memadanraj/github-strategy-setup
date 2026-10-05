@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { profileQuery } from "@/lib/studio";
+import { BillingPanel } from "@/components/studio/BillingPanel";
 
 export const Route = createFileRoute("/_authenticated/_studio/settings")({
   head: () => ({
@@ -64,13 +65,7 @@ function SettingsPage() {
         <Button variant="signal">Save profile</Button>
       </form>
 
-      <div className="mt-6 rounded-xl border border-border bg-surface p-6">
-        <h2 className="text-lg font-bold">Plan</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          You're on the <span className="capitalize text-foreground">{profile?.plan_slug}</span> plan with{" "}
-          <span className="text-foreground">{profile?.credits_balance}</span> credits. Upgrades arrive with billing.
-        </p>
-      </div>
+      <BillingPanel currentPlan={profile?.plan_slug ?? "free"} credits={profile?.credits_balance ?? 0} />
 
       {isEmailUser && (
         <form onSubmit={changePassword} className="mt-6 space-y-4 rounded-xl border border-border bg-surface p-6">
