@@ -66,6 +66,30 @@ export const createSubscriptionCheckout=createServerFn({method:"POST"})
     return {ok:true,url:session.url as string};
   });
 
+export const changeSubscriptionPlan=createServerFn({method:"POST"})
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d)=>z.object({planSlug:z.string().min(1).max(50)}).parse(d))
+  .handler(async({data,context})=>{
+    const db:any=await admin();
+    const plan=(await db.from("plans").select("slug,stripe_price_id,is_active").eq("slug",data.planSlug).maybeSingle()).data;
+    if(!plan?.is_active) throw new Error("Plan not found or inactive.");
+    if(!plan.stripe_price_id) throw new Error("This plan is not connected to a Stripe Price yet.");
+    const current=(await db.from("stripe_subscriptions").select("stripe_subscription_id,status").eq("user_id",context.userId).in("status",["active","trialing","past_due"]).order("created_at",{ascending:false}).limit(1).maybeSingle()).data;
+    if(!current?.stripe_subscription_id) throw new Error("No active subscription found. Use Checkout to start a subscription.");
+    const sub=await stripe(`subscriptions/${current.stripe_subscription_id}`,"GET");
+    const item=sub.items?.data?.[0];
+    if(!item?.id) throw new Error("Stripe subscription has no billable item.");
+    const updated=await stripe(`subscriptions/${current.stripe_subscription_id}`,"POST",encodeForm({
+      "items[0][id]":item.id,
+      "items[0][price]":plan.stripe_price_id,
+      proration_behavior:"create_prorations",
+      "metadata[user_id]":context.userId,
+      "metadata[plan_slug]":plan.slug,
+    }));
+    await db.from("profiles").update({plan_slug:plan.slug,updated_at:new Date().toISOString()}).eq("id",context.userId);
+    return {ok:true,status:updated.status};
+  });
+
 export const createCreditPackCheckout=createServerFn({method:"POST"})
   .middleware([requireSupabaseAuth])
   .inputValidator((d)=>z.object({packSlug:z.string().min(1).max(50)}).parse(d))
