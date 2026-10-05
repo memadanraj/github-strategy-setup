@@ -1,6 +1,6 @@
 # Reelforge — Integration Setup
 
-The application roadmap is now implemented through Phase 15. External providers still require their own credentials and, for Stripe, real Price IDs.
+The application roadmap is implemented through Phase 15 at the code level. External providers still require their own credentials and, for Stripe, real Price IDs. Phase 07 AI-media generation also requires the migration below.
 
 ## 1. Apply database migrations
 
@@ -8,10 +8,17 @@ Apply the new migrations in order after the existing 0009_thumbnail_tasks.sql:
 
 - drizzle/migrations/0010_youtube.sql
 - drizzle/migrations/0011_billing.sql
+- drizzle/migrations/0012_fix_ai_media_models.sql
 
 Use the same Postgres/Lovable migration workflow already used for this repository.
 
-## 2. Rendering
+## 2. AI visual generation
+
+The visual pipeline uses the Lovable AI Gateway with `google/veo-3.1-lite` for scene clips and `openai/gpt-image-2` for scene images. Existing databases must apply `0012_fix_ai_media_models.sql` so stored `ai_tasks.model` values use supported media models.
+
+Clip generation is asynchronous: create the job, poll its status, obtain the MP4 URL (or gateway content endpoint), then store the bytes in Supabase Storage. The server now handles direct media URLs and falls back to the gateway video-content endpoint when a direct download URL cannot be fetched.
+
+## 3. Rendering
 
 Set:
 - SHOTSTACK_API_KEY
@@ -19,7 +26,7 @@ Set:
 
 Phase 10 now signs private Supabase Storage assets before sending the render manifest to Shotstack.
 
-## 3. YouTube
+## 4. YouTube
 
 Enable YouTube Data API v3 and YouTube Analytics API in Google Cloud.
 
@@ -35,7 +42,7 @@ Register the exact redirect URI in the Google OAuth client. The app requests you
 
 The refresh token is encrypted at rest and never returned to the browser.
 
-## 4. Stripe
+## 5. Stripe
 
 Set:
 - STRIPE_SECRET_KEY
@@ -60,7 +67,7 @@ The handler verifies the Stripe signature and is idempotent by Stripe event ID.
 
 Existing subscribers change plans by updating the current Stripe subscription item; new subscribers use hosted Checkout.
 
-## 5. Optional Sentry monitoring
+## 6. Optional Sentry monitoring
 
 Set:
 - SENTRY_DSN
@@ -68,13 +75,13 @@ Set:
 
 The server reports unhandled errors to Sentry when a DSN is configured. Existing Lovable/client error reporting remains enabled.
 
-## 6. Production rate limiting
+## 7. Production rate limiting
 
 Server functions have a 120 requests/minute per-IP/path in-process limiter.
 
 This is intentionally dependency-free. If the application is deployed across multiple instances/regions, replace the in-process bucket with a shared KV/Redis/Durable Object implementation.
 
-## 7. Security
+## 8. Security
 
 Do not commit real provider secrets. Use .env.example as the configuration template.
 
