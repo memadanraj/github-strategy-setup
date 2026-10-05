@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as YoutubeCallbackRouteImport } from './routes/youtube.callback'
+import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
 import { Route as AuthenticatedStudioRouteRouteImport } from './routes/_authenticated/_studio/route'
 import { Route as AuthenticatedStudioAdminRouteImport } from './routes/_authenticated/_studio/admin'
 import { Route as AuthenticatedStudioDashboardRouteImport } from './routes/_authenticated/_studio/dashboard'
@@ -43,6 +44,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const YoutubeCallbackRoute = YoutubeCallbackRouteImport.update({
   id: '/youtube/callback',
   path: '/youtube/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
+  id: '/api/stripe/webhook',
+  path: '/api/stripe/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedStudioRouteRoute =
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/youtube/callback': typeof YoutubeCallbackRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/admin': typeof AuthenticatedStudioAdminRoute
   '/dashboard': typeof AuthenticatedStudioDashboardRoute
   '/settings': typeof AuthenticatedStudioSettingsRoute
@@ -110,6 +117,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/youtube/callback': typeof YoutubeCallbackRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/_authenticated/_studio': typeof AuthenticatedStudioRouteRouteWithChildren
   '/_authenticated/_studio/admin': typeof AuthenticatedStudioAdminRoute
   '/_authenticated/_studio/dashboard': typeof AuthenticatedStudioDashboardRoute
@@ -124,6 +132,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/youtube/callback'
+    | '/api/stripe/webhook'
     | '/admin'
     | '/dashboard'
     | '/settings'
@@ -146,6 +155,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/youtube/callback'
+    | '/api/stripe/webhook'
     | '/_authenticated/_studio'
     | '/_authenticated/_studio/admin'
     | '/_authenticated/_studio/dashboard'
@@ -160,6 +170,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   YoutubeCallbackRoute: typeof YoutubeCallbackRoute
+  ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -197,6 +208,13 @@ declare module '@tanstack/react-router' {
       path: '/youtube/callback'
       fullPath: '/youtube/callback'
       preLoaderRoute: typeof YoutubeCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/stripe/webhook': {
+      id: '/api/stripe/webhook'
+      path: '/api/stripe/webhook'
+      fullPath: '/api/stripe/webhook'
+      preLoaderRoute: typeof ApiStripeWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/_studio': {
@@ -285,6 +303,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   YoutubeCallbackRoute: YoutubeCallbackRoute,
+  ApiStripeWebhookRoute: ApiStripeWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
