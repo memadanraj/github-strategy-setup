@@ -47,11 +47,13 @@ export async function handleStripeWebhook(request:Request){
             updated_at:new Date().toISOString()
           },{onConflict:"stripe_subscription_id"});
           await db.from("profiles").update({plan_slug:planSlug,updated_at:new Date().toISOString()}).eq("id",userId);
+          const plan=(await db.from("plans").select("monthly_credits").eq("slug",planSlug).maybeSingle()).data;
+          if(plan?.monthly_credits) await addCredits(db,userId,Number(plan.monthly_credits),"subscription",`Initial ${planSlug} credits`);
         }
       }
     } else if(event.type==="invoice.paid"){
       const invoice=event.data.object, subId=typeof invoice.subscription==="string"?invoice.subscription:invoice.subscription?.id;
-      if(subId){
+      if(subId && invoice.billing_reason !== "subscription_create"){
         const subRow=(await db.from("stripe_subscriptions").select("user_id,plan_slug").eq("stripe_subscription_id",subId).maybeSingle()).data;
         if(subRow){
           const plan=(await db.from("plans").select("monthly_credits").eq("slug",subRow.plan_slug).maybeSingle()).data;
