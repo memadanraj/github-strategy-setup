@@ -4,12 +4,12 @@ import { useServerFn } from "@tanstack/react-start";
 import { CreditCard, ExternalLink, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { createBillingPortal, createCreditPackCheckout, createSubscriptionCheckout, getBillingStatus } from "@/lib/billing.functions";
+import { changeSubscriptionPlan, createBillingPortal, createCreditPackCheckout, createSubscriptionCheckout, getBillingStatus } from "@/lib/billing.functions";
 
 function money(cents:number){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(cents/100);}
 
 export function BillingPanel({ currentPlan, credits }:{currentPlan:string;credits:number}){
-  const status=useServerFn(getBillingStatus), checkout=useServerFn(createSubscriptionCheckout), packCheckout=useServerFn(createCreditPackCheckout), portal=useServerFn(createBillingPortal);
+  const status=useServerFn(getBillingStatus), checkout=useServerFn(createSubscriptionCheckout), changePlan=useServerFn(changeSubscriptionPlan), packCheckout=useServerFn(createCreditPackCheckout), portal=useServerFn(createBillingPortal);
   const [busy,setBusy]=useState<string|null>(null);
   const {data,refetch}=useQuery({queryKey:["billing_status"],queryFn:()=>status()});
 
@@ -21,8 +21,17 @@ export function BillingPanel({ currentPlan, credits }:{currentPlan:string;credit
 
   async function upgrade(planSlug:string){
     setBusy(planSlug);
-    try{const r=await checkout({data:{planSlug}});if(r.ok)window.location.assign(r.url);}
-    catch(e:any){toast.error(e.message);}finally{setBusy(null);}
+    try{
+      const hasSubscription=["active","trialing","past_due"].includes(data?.subscription?.status||"");
+      if(hasSubscription){
+        await changePlan({data:{planSlug}});
+        toast.success("Subscription plan updated");
+        await refetch();
+      }else{
+        const r=await checkout({data:{planSlug}});
+        if(r.ok)window.location.assign(r.url);
+      }
+    }catch(e:any){toast.error(e.message);}finally{setBusy(null);}
   }
   async function buy(slug:string){
     setBusy(slug);
@@ -57,7 +66,7 @@ export function BillingPanel({ currentPlan, credits }:{currentPlan:string;credit
           <p className="mt-4 text-2xl font-bold">{plan.price_monthly_cents===0?"Free":money(plan.price_monthly_cents)}<span className="text-xs font-normal text-muted-foreground">/mo</span></p>
           <p className="mt-2 text-sm text-muted-foreground">{plan.monthly_credits.toLocaleString()} monthly credits · {plan.max_resolution}</p>
           <Button className="mt-4 w-full" variant={plan.slug===currentPlan?"panel":"signal"} disabled={plan.slug===currentPlan||plan.slug==="free"||!plan.stripe_price_id||!!busy} onClick={()=>upgrade(plan.slug)}>
-            {busy===plan.slug?<Loader2 className="animate-spin"/>:plan.slug===currentPlan?"Current plan":!plan.stripe_price_id?"Stripe price not configured":"Upgrade"}
+            {busy===plan.slug?<Loader2 className="animate-spin"/>:plan.slug===currentPlan?"Current plan":!plan.stripe_price_id?"Stripe price not configured":data?.subscription?.status?"Change plan":"Upgrade"}
           </Button>
         </div>)}
       </div>
