@@ -4,9 +4,9 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1";
 
-function gatewayHeaders(apiKey: string) {
+function gatewayHeaders(apiKey: string, json = true) {
   return {
-    "Content-Type": "application/json",
+    ...(json ? { "Content-Type": "application/json" } : {}),
     Authorization: `Bearer ${apiKey}`,
     "Lovable-API-Key": apiKey,
     "X-Lovable-AIG-SDK": "tanstack-ai",
@@ -27,17 +27,23 @@ async function gatewayError(res: Response, fallback: string) {
   return detail ? `${fallback} (${detail})` : `${fallback} (${res.status}).`;
 }
 
-function clipSeconds(sceneDuration: number) {
+function clipSeconds(sceneDuration: number): "4" | "6" | "8" {
   if (sceneDuration <= 5) return "4";
   if (sceneDuration <= 7) return "6";
   return "8";
 }
 
-async function fetchVideoBytes(url: string, apiKey: string): Promise<Buffer | null> {
-  for (const headers of [
+async function fetchMediaBytes(url: string, apiKey: string): Promise<Buffer | null> {
+  const headerOptions = [
     {},
-    { Authorization: `Bearer ${apiKey}`, "Lovable-API-Key": apiKey, "X-Lovable-AIG-SDK": "tanstack-ai" },
-  ]) {
+    {
+      Authorization: `Bearer ${apiKey}`,
+      "Lovable-API-Key": apiKey,
+      "X-Lovable-AIG-SDK": "tanstack-ai",
+    },
+  ];
+
+  for (const headers of headerOptions) {
     const res = await fetch(url, { headers });
     if (!res.ok) continue;
     return Buffer.from(await res.arrayBuffer());
@@ -47,15 +53,10 @@ async function fetchVideoBytes(url: string, apiKey: string): Promise<Buffer | nu
 
 async function fetchVideoContent(jobId: string, apiKey: string): Promise<Buffer> {
   const res = await fetch(`${GATEWAY}/videos/${encodeURIComponent(jobId)}/content`, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Lovable-API-Key": apiKey,
-      "X-Lovable-AIG-SDK": "tanstack-ai",
-    },
+    headers: gatewayHeaders(apiKey, false),
   });
   if (!res.ok) {
-    const detail = await gatewayError(res, "The generated clip could not be downloaded");
-    throw new Error(detail);
+    throw new Error(await gatewayError(res, "The generated clip could not be downloaded"));
   }
   return Buffer.from(await res.arrayBuffer());
 }
@@ -67,10 +68,12 @@ async function buildVisualContext(supabase: any, projectId: string) {
     .eq("id", projectId)
     .maybeSingle();
   if (!project) return null;
+
   const { data: characters } = await supabase
     .from("characters")
     .select("name,description,visual_notes")
     .eq("project_id", projectId);
+
   return { project, characters: characters ?? [] };
 }
 
@@ -84,7 +87,7 @@ function styleDirective(style: string) {
     retro: "retro 80s poster style, grain, neon accents",
     darkdoc: "dark documentary mood, moody shadows, desaturated tones",
   };
-  return map[style] ?? map["cinematic"]!;
+  return map[style] ?? map.cinematic!;
 }
 
 function composePrompt(project: any, characters: any[], visualPrompt: string) {
@@ -98,57 +101,97 @@ function composePrompt(project: any, characters: any[], visualPrompt: string) {
 }
 
 async function generateImage(apiKey: string, model: string, prompt: string, vertical: boolean): Promise<Buffer> {
-  const res = await fetch(`${GATEWAY}/v1/images/generations`, {
+  const res = await fetch(`${GATEWAY}/images/generations`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, prompt, size: vertical ? "1024x1536" : "1536x1024" }),
+    headers: gatewayHeaders(apiKey),
+    body: JSON.stringify({
+      model,
+      prompt,
+      n: 1,
+      size: vertical ? "1024x1536" : "1536x1024",
+    }),
   });
+
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    console.error("image gateway error", res.status, body);
-    if (res.status === 429) throw new Error("AI is busy right now. Please try again shortly.");
-    if (res.status === 402) throw new Error("AI credits for this workspace are exhausted.");
-    throw new Error("Image generation failed.");
+    throw new Error(await gatewayError(res, "Image generation failed"));
   }
+
   const json = await res.json();
-  const b64: string | undefined = json.data?.[0]?.b64_json;
-  if (!b64) throw new Error("AI returned no image.");
-  return Buffer.from(b64, "base64");
+  const item = json.data?.[0];
+
+  if (item?.b64_json) return Buffer.from(item.b64_json, "base64");
+
+  if (item?.url) {
+    const bytes = await fetchMediaBytes(item.url, apiKey);
+    if (bytes) return bytes;
+  }
+
+  throw new Error("AI returned no downloadable image.");
 }
 
-async function generateClip(apiKey: string, model: string, prompt: string, durationSeconds: number, vertical: boolean): Promise<Buffer> {
-  const start = await fetch(`${GATEWAY}/v1/videos`, {
+async function generateClip(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  durationSeconds: number,
+  vertical: boolean,
+): Promise<Buffer> {
+  const start = await fetch(`${GATEWAY}/videos`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, prompt }),
+    headers: gatewayHeaders(apiKey),
+    body: JSON.stringify({
+      model,
+      prompt,
+      size: vertical ? "720x1280" : "1280x720",
+      seconds: clipSeconds(durationSeconds),
+    }),
   });
+
   if (!start.ok) {
-    const body = await start.text().catch(() => "");
-    console.error("video gateway error", start.status, body);
-    if (start.status === 429) throw new Error("AI is busy right now. Please try again shortly.");
-    if (start.status === 402) throw new Error("AI credits for this workspace are exhausted.");
-    throw new Error("Clip generation failed to start.");
+    throw new Error(await gatewayError(start, "Clip generation failed to start"));
   }
+
   const job = await start.json();
   const id = job.id;
-  if (!id) throw new Error("Clip generation failed to start.");
-  const deadline = Date.now() + 8 * 60 * 1000;
+
+  if (!id) throw new Error("Clip generation failed to start: gateway returned no job ID.");
+
+  const deadline = Date.now() + 10 * 60 * 1000;
+
   for (;;) {
-    await new Promise((r) => setTimeout(r, 8000));
-    const poll = await fetch(`${GATEWAY}/v1/videos/${id}`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    const poll = await fetch(`${GATEWAY}/videos/${encodeURIComponent(id)}`, {
+      headers: gatewayHeaders(apiKey, false),
     });
     const info = await poll.json().catch(() => ({}));
-    if (info.status === "completed" || info.status === "succeeded") {
-      const url: string | undefined = info.video_url ?? info.url ?? info.output?.url;
-      if (!url) throw new Error("Clip finished but no download URL was returned.");
-      const dl = await fetch(url);
-      if (!dl.ok) throw new Error("Couldn't download the generated clip.");
-      return Buffer.from(await dl.arrayBuffer());
+
+    if (!poll.ok) {
+      throw new Error(await gatewayError(poll, "Clip status check failed"));
     }
-    if (info.status === "failed" || info.status === "error")
-      throw new Error(info.error?.message ?? "Clip generation failed.");
-    if (Date.now() > deadline) throw new Error("Clip generation timed out.");
+
+    if (info.status === "completed" || info.status === "succeeded") {
+      const url: string | undefined =
+        info.url ??
+        info.video_url ??
+        info.video?.url ??
+        info.output?.url;
+
+      if (url) {
+        const bytes = await fetchMediaBytes(url, apiKey);
+        if (bytes) return bytes;
+      }
+
+      return fetchVideoContent(id, apiKey);
+    }
+
+    if (info.status === "failed" || info.status === "error" || info.status === "cancelled") {
+      throw new Error(info.error?.message ?? info.error ?? "Clip generation failed.");
+    }
+
+    if (Date.now() > deadline) {
+      throw new Error("Clip generation timed out after 10 minutes.");
+    }
   }
 }
 
@@ -158,45 +201,75 @@ async function runVisualJob(opts: {
   projectId: string;
   sceneId: string;
   input: Record<string, unknown>;
-  work: (ctx: { project: any; characters: any[]; scene: any; apiKey: string; model: string }) => Promise<{ bytes: Buffer; ext: string; contentType: string; kind: string }>;
+  work: (ctx: {
+    project: any;
+    characters: any[];
+    scene: any;
+    apiKey: string;
+    model: string;
+  }) => Promise<{ bytes: Buffer; ext: string; contentType: string; kind: string }>;
 }) {
   const { supabase } = opts;
   const ctx = await buildVisualContext(supabase, opts.projectId);
   if (!ctx) return { ok: false as const, error: "Project not found" };
+
   const { data: scene } = await supabase
     .from("scenes")
-    .select("id,title,visual_prompt,narration")
+    .select("id,title,visual_prompt,narration,duration_seconds")
     .eq("id", opts.sceneId)
     .eq("project_id", opts.projectId)
     .maybeSingle();
-  if (!scene) return { ok: false as const, error: "Scene not found" };
-  if (!scene.visual_prompt?.trim()) return { ok: false as const, error: "Add a visual description to the scene first." };
 
-  const { data: task } = await supabase.from("ai_tasks").select("model").eq("slug", opts.taskSlug).maybeSingle();
+  if (!scene) return { ok: false as const, error: "Scene not found" };
+  if (!scene.visual_prompt?.trim()) {
+    return { ok: false as const, error: "Add a visual description to the scene first." };
+  }
+
+  const { data: task } = await supabase
+    .from("ai_tasks")
+    .select("model")
+    .eq("slug", opts.taskSlug)
+    .maybeSingle();
+
   const { data: jobId, error: je } = await supabase.rpc("start_generation_job", {
     _task_slug: opts.taskSlug,
     _project_id: opts.projectId,
     _input: opts.input,
   });
+
   if (je || !jobId) {
-    const msg = je?.message?.includes("INSUFFICIENT_CREDITS") ? "Not enough credits." : "Couldn't start the AI job.";
+    const msg = je?.message?.includes("INSUFFICIENT_CREDITS")
+      ? "Not enough credits."
+      : "Couldn't start the AI job.";
     return { ok: false as const, error: msg };
   }
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
   try {
     const apiKey = process.env["LOVABLE_API_KEY"];
     if (!apiKey) throw new Error("AI is not configured");
+
     const out = await opts.work({
       project: ctx.project,
       characters: ctx.characters,
       scene,
       apiKey,
-      model: task?.model ?? (opts.taskSlug === "generate_image" ? "openai/gpt-image-2.5-sunburst" : "google/veo-3.1-lite"),
+      model:
+        task?.model ??
+        (opts.taskSlug === "generate_image"
+          ? "openai/gpt-image-2"
+          : "google/veo-3.1-lite"),
     });
+
     const path = `${ctx.project.user_id}/${opts.projectId}/${crypto.randomUUID()}.${out.ext}`;
-    const up = await supabaseAdmin.storage.from("project-assets").upload(path, out.bytes, { contentType: out.contentType });
+
+    const up = await supabaseAdmin.storage
+      .from("project-assets")
+      .upload(path, out.bytes, { contentType: out.contentType });
+
     if (up.error) throw new Error("Couldn't store the generated file");
+
     const name = `${scene.title} — AI ${out.kind}`;
     const { error: ae } = await supabaseAdmin.from("assets").insert({
       project_id: opts.projectId,
@@ -205,24 +278,36 @@ async function runVisualJob(opts: {
       storage_path: path,
       meta: { ai: true, task: opts.taskSlug, scene_id: opts.sceneId },
     });
+
     if (ae) throw new Error("Couldn't register the asset");
+
     await supabaseAdmin
       .from("scenes")
       .update(out.kind === "image" ? { image_path: path } : { clip_path: path })
       .eq("id", opts.sceneId);
-    await supabaseAdmin.rpc("complete_generation_job", { _job_id: jobId, _output: { path } });
+
+    await supabaseAdmin.rpc("complete_generation_job", {
+      _job_id: jobId,
+      _output: { path },
+    });
+
     return { ok: true as const, path };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "AI generation failed";
     console.error(`${opts.taskSlug} failed`, e);
-    await supabaseAdmin.rpc("fail_generation_job", { _job_id: jobId, _error: msg });
+    await supabaseAdmin.rpc("fail_generation_job", {
+      _job_id: jobId,
+      _error: msg,
+    });
     return { ok: false as const, error: `${msg} Your credits were refunded.` };
   }
 }
 
 export const generateSceneImage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ projectId: z.string().uuid(), sceneId: z.string().uuid() }).parse(d))
+  .inputValidator((d) =>
+    z.object({ projectId: z.string().uuid(), sceneId: z.string().uuid() }).parse(d),
+  )
   .handler(async ({ data, context }) =>
     runVisualJob({
       supabase: context.supabase,
@@ -231,7 +316,12 @@ export const generateSceneImage = createServerFn({ method: "POST" })
       sceneId: data.sceneId,
       input: { sceneId: data.sceneId },
       work: async ({ project, characters, scene, apiKey, model }) => ({
-        bytes: await generateImage(apiKey, model, composePrompt(project, characters, scene.visual_prompt), project.format === "short"),
+        bytes: await generateImage(
+          apiKey,
+          model,
+          composePrompt(project, characters, scene.visual_prompt),
+          project.format === "short",
+        ),
         ext: "png",
         contentType: "image/png",
         kind: "image",
@@ -241,7 +331,9 @@ export const generateSceneImage = createServerFn({ method: "POST" })
 
 export const generateSceneClip = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ projectId: z.string().uuid(), sceneId: z.string().uuid() }).parse(d))
+  .inputValidator((d) =>
+    z.object({ projectId: z.string().uuid(), sceneId: z.string().uuid() }).parse(d),
+  )
   .handler(async ({ data, context }) =>
     runVisualJob({
       supabase: context.supabase,
@@ -250,7 +342,13 @@ export const generateSceneClip = createServerFn({ method: "POST" })
       sceneId: data.sceneId,
       input: { sceneId: data.sceneId },
       work: async ({ project, characters, scene, apiKey, model }) => ({
-        bytes: await generateClip(\n          apiKey,\n          model,\n          composePrompt(project, characters, scene.visual_prompt),\n          Number(scene.duration_seconds) || 5,\n          project.format === "short",\n        ),
+        bytes: await generateClip(
+          apiKey,
+          model,
+          composePrompt(project, characters, scene.visual_prompt),
+          Number(scene.duration_seconds) || 5,
+          project.format === "short",
+        ),
         ext: "mp4",
         contentType: "video/mp4",
         kind: "video",
