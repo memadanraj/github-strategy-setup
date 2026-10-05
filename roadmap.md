@@ -12,6 +12,6 @@
 - [x] Phase 10 Rendering — queue, renderer, exports
 - [x] Phase 11 Thumbnail studio
 - [x] Phase 12 YouTube — OAuth, publishing, analytics
-- [ ] Phase 13 Billing
+- [x] Phase 13 Billing
 - [x] Phase 14 Admin
 - [ ] Phase 15 Production hardening
