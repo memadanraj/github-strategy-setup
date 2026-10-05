@@ -38,7 +38,7 @@ function AdminPage() {
       {isLoading || !data ? <Loader2 className="animate-spin" /> : <>
         <section className="rounded-xl border border-border bg-surface p-5">
           <h2 className="text-lg font-bold">Users ({data.users.length})</h2>
-          <div className="mt-4 space-y-2">{data.users.map((u) => <UserRow key={u.id} user={u} plans={data.plans} />)}</div>
+          <div className="mt-4 space-y-2">{data.users.map((u: any) => <UserRow key={u.id} user={u} plans={data.plans} />)}</div>
         </section>
         <section className="rounded-xl border border-border bg-surface p-5">
           <h2 className="text-lg font-bold">Recent AI jobs</h2>
@@ -61,16 +61,16 @@ function UserRow({ user, plans }: { user: any; plans: { slug: string; name: stri
 
   async function apply() {
     const n = parseInt(amount, 10);
-    if (!n) return toast.error("Enter a non-zero amount");
+    if (!n) { toast.error("Enter a non-zero amount"); return; }
     setBusy(true);
     const r = await adjust({ data: { userId: user.id, amount: n, reason: "Manual adjustment" } });
     setBusy(false);
-    if (!r.ok) return toast.error(r.error);
+    if (!r.ok) { toast.error(r.error); return; }
     toast.success(`Balance now ${r.balance}`); setAmount(""); refresh();
   }
   async function changePlan(slug: string) {
     const r = await plan({ data: { userId: user.id, planSlug: slug } });
-    if (!r.ok) return toast.error(r.error);
+    if (!r.ok) { toast.error(r.error); return; }
     toast.success("Plan updated"); refresh();
   }
 
