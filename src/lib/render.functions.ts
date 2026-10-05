@@ -1,9 +1,14 @@
 import {createServerFn} from "@tanstack/react-start";
 import {z} from "zod";
 import {requireSupabaseAuth} from "@/integrations/supabase/auth-middleware";
-import {supabaseAdmin} from "@/integrations/supabase/client.server";
 import {getRenderProvider,type RenderManifest} from "./render.providers.server";
-const admin:any=supabaseAdmin;
+async function adm():Promise<any>{return (await import("@/integrations/supabase/client.server")).supabaseAdmin}
+async function signManifest(admin:any,m:RenderManifest){
+ const paths=new Set<string>();m.assets.forEach((a:any)=>a.storage_path&&paths.add(a.storage_path));m.scenes.forEach((s:any)=>{s.image_path&&paths.add(s.image_path);s.clip_path&&paths.add(s.clip_path)});
+ const list=[...paths];const urls=new Map<string,string>();
+ if(list.length){const r=await admin.storage.from("project-assets").createSignedUrls(list,86400);if(r.error)throw new Error("Couldn't prepare project files for rendering");(r.data||[]).forEach((x:any)=>x.signedUrl&&x.path&&urls.set(x.path,x.signedUrl))}
+ m.assets.forEach((a:any)=>{a.url=urls.get(a.storage_path)});m.scenes.forEach((s:any)=>{s.image_url=s.image_path?urls.get(s.image_path):undefined;s.clip_url=s.clip_path?urls.get(s.clip_path):undefined});
+}
 async function buildManifest(s:any,projectId:string){
  const [p,t,c,cap,a,set,sc]=await Promise.all([
   s.from("projects").select("id,title,format,user_id").eq("id",projectId).maybeSingle(),
@@ -21,7 +26,7 @@ async function buildManifest(s:any,projectId:string){
 }
 export const createRenderJob=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),presetId:z.string().uuid().optional()}).parse(d)).handler(async({data,context})=>{
  try{
-  const s:any=context.supabase; const {project,manifest}=await buildManifest(s,data.projectId);
+  const s:any=context.supabase;const admin=await adm(); const {manifest}=await buildManifest(s,data.projectId);
   const preset=data.presetId?((await s.from("render_presets").select("*").eq("id",data.presetId).eq("project_id",data.projectId).maybeSingle()).data):null;
   if(preset){manifest.width=preset.width;manifest.height=preset.height;manifest.fps=preset.fps}
   const r=await s.from("render_jobs").insert({project_id:data.projectId,user_id:context.userId,preset_id:preset?.id||null,status:"queued",provider:"cloud",progress:0,input_manifest:manifest}).select("id").single();
@@ -34,7 +39,7 @@ export const createRenderJob=createServerFn({method:"POST"}).middleware([require
  }catch(e:any){return{ok:false,error:e.message||"Couldn't create render job."}}
 });
 export const getRenderJob=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),jobId:z.string().uuid()}).parse(d)).handler(async({data,context})=>{
- const s:any=context.supabase; const r=await s.from("render_jobs").select("*").eq("id",data.jobId).eq("project_id",data.projectId).maybeSingle();if(r.error||!r.data)return{ok:false,error:"Render job not found."};
+ const s:any=context.supabase;const admin=await adm(); const r=await s.from("render_jobs").select("*").eq("id",data.jobId).eq("project_id",data.projectId).maybeSingle();if(r.error||!r.data)return{ok:false,error:"Render job not found."};
  const job:any=r.data;
  if(job.provider_job_id && (job.status==="processing"||job.status==="queued")){const provider=getRenderProvider();if(provider){try{const st=await provider.status(job.provider_job_id);await admin.from("render_jobs").update({status:st.status,progress:st.progress,error:st.error||null,finished_at:st.status==="completed"||st.status==="failed"?new Date().toISOString():null,updated_at:new Date().toISOString()}).eq("id",job.id);job.status=st.status;job.progress=st.progress;job.error=st.error||null;if(st.status==="completed"&&st.outputUrl){const already=await admin.from("exports").select("id").eq("render_job_id",job.id).maybeSingle();if(!already.data){const dl=await fetch(st.outputUrl);if(dl.ok){const bytes=Buffer.from(await dl.arrayBuffer());const path=`${job.user_id}/${data.projectId}/exports/${job.id}.mp4`;const up=await admin.storage.from("project-assets").upload(path,bytes,{contentType:"video/mp4",upsert:true});if(up.error)throw new Error("Couldn't store rendered export");const asset=await admin.from("assets").insert({project_id:data.projectId,kind:"video",name:`Export ${job.id}.mp4`,storage_path:path,meta:{render_job_id:job.id}}).select("id").single();await admin.from("exports").insert({project_id:data.projectId,render_job_id:job.id,asset_id:asset.data?.id||null,format:"mp4",storage_path:path,filename:`export-${job.id}.mp4`,size_bytes:bytes.length,width:job.input_manifest?.width,height:job.input_manifest?.height,fps:job.input_manifest?.fps,status:"ready"});}}}}catch(e:any){await admin.from("render_jobs").update({status:"failed",error:e.message,finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",job.id);job.status="failed";job.error=e.message}}}
  return{ok:true,job}
