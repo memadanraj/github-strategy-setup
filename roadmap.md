@@ -9,9 +9,9 @@
 - [x] Phase 07 Visuals — images, styles, characters, video
 - [x] Phase 08 Audio — voice, music, SFX
 - [x] Phase 09 Editor — timeline, preview, captions
-- [ ] Phase 10 Rendering — queue, renderer, exports
+- [x] Phase 10 Rendering — queue, renderer, exports
 - [x] Phase 11 Thumbnail studio
-- [ ] Phase 12 YouTube — OAuth, publishing, analytics
+- [x] Phase 12 YouTube — OAuth, publishing, analytics
 - [ ] Phase 13 Billing
 - [x] Phase 14 Admin
 - [ ] Phase 15 Production hardening
