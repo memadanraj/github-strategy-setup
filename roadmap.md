@@ -13,5 +13,5 @@
 - [x] Phase 11 Thumbnail studio
 - [ ] Phase 12 YouTube — OAuth, publishing, analytics
 - [ ] Phase 13 Billing
-- [ ] Phase 14 Admin
+- [x] Phase 14 Admin
 - [ ] Phase 15 Production hardening

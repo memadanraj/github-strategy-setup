@@ -1,9 +1,11 @@
 import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LayoutDashboard, Clapperboard, Settings, LogOut, Plus, Coins } from "lucide-react";
+import { LayoutDashboard, Clapperboard, Settings, LogOut, Plus, Coins, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { profileQuery } from "@/lib/studio";
+import { useServerFn } from "@tanstack/react-start";
+import { checkIsAdmin } from "@/lib/admin.functions";
 import { NewProjectDialog } from "@/components/studio/NewProjectDialog";
 
 export const Route = createFileRoute("/_authenticated/_studio")({
@@ -19,6 +21,9 @@ const nav = [
 function StudioLayout() {
   const { user } = Route.useRouteContext();
   const { data: profile } = useQuery(profileQuery(user.id));
+  const check = useServerFn(checkIsAdmin);
+  const { data: role } = useQuery({ queryKey: ["is_admin"], queryFn: () => check() });
+  const navItems = role?.isAdmin ? [...nav, { to: "/admin", label: "Admin", icon: ShieldCheck } as const] : nav;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -42,7 +47,7 @@ function StudioLayout() {
           <Button variant="signal" className="mt-6 w-full"><Plus /> New project</Button>
         </NewProjectDialog>
         <nav className="mt-6 space-y-1">
-          {nav.map((n) => (
+          {navItems.map((n) => (
             <Link
               key={n.to}
               to={n.to}
@@ -70,7 +75,7 @@ function StudioLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-background/80 px-6 backdrop-blur">
           <div className="flex gap-1 md:hidden">
-            {nav.map((n) => (
+            {navItems.map((n) => (
               <Link key={n.to} to={n.to} className="rounded-md p-2 text-muted-foreground" activeProps={{ className: "bg-surface-raised text-foreground" }}>
                 <n.icon className="size-4" />
               </Link>
