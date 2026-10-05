@@ -2,7 +2,63 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const GATEWAY = "https://ai.gateway.lovable.dev";
+const GATEWAY = "https://ai.gateway.lovable.dev/v1";
+
+function gatewayHeaders(apiKey: string) {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+    "Lovable-API-Key": apiKey,
+    "X-Lovable-AIG-SDK": "tanstack-ai",
+  };
+}
+
+async function gatewayError(res: Response, fallback: string) {
+  const body = await res.text().catch(() => "");
+  let detail = "";
+  try {
+    const json = JSON.parse(body);
+    detail = json?.error?.message ?? json?.message ?? json?.detail ?? "";
+  } catch {
+    detail = body.slice(0, 240);
+  }
+  if (res.status === 429) return "AI is busy right now. Please try again shortly.";
+  if (res.status === 402) return "AI credits for this workspace are exhausted.";
+  return detail ? `${fallback} (${detail})` : `${fallback} (${res.status}).`;
+}
+
+function clipSeconds(sceneDuration: number) {
+  if (sceneDuration <= 5) return "4";
+  if (sceneDuration <= 7) return "6";
+  return "8";
+}
+
+async function fetchVideoBytes(url: string, apiKey: string): Promise<Buffer | null> {
+  for (const headers of [
+    {},
+    { Authorization: `Bearer ${apiKey}`, "Lovable-API-Key": apiKey, "X-Lovable-AIG-SDK": "tanstack-ai" },
+  ]) {
+    const res = await fetch(url, { headers });
+    if (!res.ok) continue;
+    return Buffer.from(await res.arrayBuffer());
+  }
+  return null;
+}
+
+async function fetchVideoContent(jobId: string, apiKey: string): Promise<Buffer> {
+  const res = await fetch(`${GATEWAY}/videos/${encodeURIComponent(jobId)}/content`, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Lovable-API-Key": apiKey,
+      "X-Lovable-AIG-SDK": "tanstack-ai",
+    },
+  });
+  if (!res.ok) {
+    const detail = await gatewayError(res, "The generated clip could not be downloaded");
+    throw new Error(detail);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
 
 async function buildVisualContext(supabase: any, projectId: string) {
   const { data: project } = await supabase
@@ -60,7 +116,7 @@ async function generateImage(apiKey: string, model: string, prompt: string, vert
   return Buffer.from(b64, "base64");
 }
 
-async function generateClip(apiKey: string, model: string, prompt: string): Promise<Buffer> {
+async function generateClip(apiKey: string, model: string, prompt: string, durationSeconds: number, vertical: boolean): Promise<Buffer> {
   const start = await fetch(`${GATEWAY}/v1/videos`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -194,7 +250,7 @@ export const generateSceneClip = createServerFn({ method: "POST" })
       sceneId: data.sceneId,
       input: { sceneId: data.sceneId },
       work: async ({ project, characters, scene, apiKey, model }) => ({
-        bytes: await generateClip(apiKey, model, composePrompt(project, characters, scene.visual_prompt)),
+        bytes: await generateClip(\n          apiKey,\n          model,\n          composePrompt(project, characters, scene.visual_prompt),\n          Number(scene.duration_seconds) || 5,\n          project.format === "short",\n        ),
         ext: "mp4",
         contentType: "video/mp4",
         kind: "video",
