@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedStudioRouteRouteImport } from './routes/_authenticated/_studio/route'
+import { Route as AuthenticatedStudioAdminRouteImport } from './routes/_authenticated/_studio/admin'
 import { Route as AuthenticatedStudioDashboardRouteImport } from './routes/_authenticated/_studio/dashboard'
 import { Route as AuthenticatedStudioSettingsRouteImport } from './routes/_authenticated/_studio/settings'
 import { Route as AuthenticatedStudioProjectsIndexRouteImport } from './routes/_authenticated/_studio/projects.index'
@@ -42,6 +43,12 @@ const AuthenticatedStudioRouteRoute =
   AuthenticatedStudioRouteRouteImport.update({
     id: '/_studio',
     getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedStudioAdminRoute =
+  AuthenticatedStudioAdminRouteImport.update({
+    id: '/admin',
+    path: '/admin',
+    getParentRoute: () => AuthenticatedStudioRouteRoute,
   } as any)
 const AuthenticatedStudioDashboardRoute =
   AuthenticatedStudioDashboardRouteImport.update({
@@ -72,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/admin': typeof AuthenticatedStudioAdminRoute
   '/dashboard': typeof AuthenticatedStudioDashboardRoute
   '/settings': typeof AuthenticatedStudioSettingsRoute
   '/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
@@ -81,6 +89,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/admin': typeof AuthenticatedStudioAdminRoute
   '/dashboard': typeof AuthenticatedStudioDashboardRoute
   '/settings': typeof AuthenticatedStudioSettingsRoute
   '/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
@@ -93,6 +102,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/_studio': typeof AuthenticatedStudioRouteRouteWithChildren
+  '/_authenticated/_studio/admin': typeof AuthenticatedStudioAdminRoute
   '/_authenticated/_studio/dashboard': typeof AuthenticatedStudioDashboardRoute
   '/_authenticated/_studio/settings': typeof AuthenticatedStudioSettingsRoute
   '/_authenticated/_studio/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/reset-password'
+    | '/admin'
     | '/dashboard'
     | '/settings'
     | '/projects/$projectId'
@@ -113,6 +124,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/reset-password'
+    | '/admin'
     | '/dashboard'
     | '/settings'
     | '/projects/$projectId'
@@ -124,6 +136,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/_authenticated/_studio'
+    | '/_authenticated/_studio/admin'
     | '/_authenticated/_studio/dashboard'
     | '/_authenticated/_studio/settings'
     | '/_authenticated/_studio/projects/$projectId'
@@ -174,6 +187,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStudioRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/_studio/admin': {
+      id: '/_authenticated/_studio/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedStudioAdminRouteImport
+      parentRoute: typeof AuthenticatedStudioRouteRoute
+    }
     '/_authenticated/_studio/dashboard': {
       id: '/_authenticated/_studio/dashboard'
       path: '/dashboard'
@@ -206,6 +226,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedStudioRouteRouteChildren {
+  AuthenticatedStudioAdminRoute: typeof AuthenticatedStudioAdminRoute
   AuthenticatedStudioDashboardRoute: typeof AuthenticatedStudioDashboardRoute
   AuthenticatedStudioSettingsRoute: typeof AuthenticatedStudioSettingsRoute
   AuthenticatedStudioProjectsProjectIdRoute: typeof AuthenticatedStudioProjectsProjectIdRoute
@@ -214,6 +235,7 @@ interface AuthenticatedStudioRouteRouteChildren {
 
 const AuthenticatedStudioRouteRouteChildren: AuthenticatedStudioRouteRouteChildren =
   {
+    AuthenticatedStudioAdminRoute: AuthenticatedStudioAdminRoute,
     AuthenticatedStudioDashboardRoute: AuthenticatedStudioDashboardRoute,
     AuthenticatedStudioSettingsRoute: AuthenticatedStudioSettingsRoute,
     AuthenticatedStudioProjectsProjectIdRoute:
