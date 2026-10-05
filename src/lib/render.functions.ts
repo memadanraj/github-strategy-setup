@@ -26,7 +26,7 @@ async function buildManifest(s:any,projectId:string){
 }
 export const createRenderJob=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),presetId:z.string().uuid().optional()}).parse(d)).handler(async({data,context})=>{
  try{
-  const s:any=context.supabase;const admin=await adm(); const {manifest}=await buildManifest(s,data.projectId);
+  const s:any=context.supabase;const admin=await adm(); const {manifest}=await buildManifest(s,data.projectId); await signManifest(admin,manifest);
   const preset=data.presetId?((await s.from("render_presets").select("*").eq("id",data.presetId).eq("project_id",data.projectId).maybeSingle()).data):null;
   if(preset){manifest.width=preset.width;manifest.height=preset.height;manifest.fps=preset.fps}
   const r=await s.from("render_jobs").insert({project_id:data.projectId,user_id:context.userId,preset_id:preset?.id||null,status:"queued",provider:"cloud",progress:0,input_manifest:manifest}).select("id").single();
