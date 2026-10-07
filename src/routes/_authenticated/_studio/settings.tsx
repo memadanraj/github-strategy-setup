@@ -65,7 +65,7 @@ function SettingsPage() {
         <Button variant="signal">Save profile</Button>
       </form>
 
-      <BillingPanel currentPlan={profile?.plan_slug ?? "free"} credits={profile?.credits_balance ?? 0} />
+      <BillingPanel currentPlan={profile?.plan_slug ?? "free"} credits={profile?.credits_balance ?? 0} userId={profile?.id ?? ""} />
 
       {isEmailUser && (
         <form onSubmit={changePassword} className="mt-6 space-y-4 rounded-xl border border-border bg-surface p-6">
