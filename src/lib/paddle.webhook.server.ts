@@ -13,8 +13,8 @@ async function verifyPaddleSignature(payload: string, header: string, secret: st
     const i = x.indexOf("=");
     return [x.slice(0, i), x.slice(i + 1)];
   }));
-  const timestamp = Number(parts.ts);
-  const signature = parts.h1;
+  const timestamp = Number(parts["ts"]);
+  const signature = parts["h1"];
   if (!timestamp || !signature || Math.abs(Date.now() / 1000 - timestamp) > 300) return false;
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
   return crypto.subtle.verify("HMAC", key, hexBytes(signature), new TextEncoder().encode(`${timestamp}:${payload}`));
