@@ -44,7 +44,7 @@ async function fetchMediaBytes(url: string, apiKey: string): Promise<Buffer | nu
   ];
 
   for (const headers of headerOptions) {
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { headers: headers as Record<string, string> });
     if (!res.ok) continue;
     return Buffer.from(await res.arrayBuffer());
   }
@@ -87,7 +87,7 @@ function styleDirective(style: string) {
     retro: "retro 80s poster style, grain, neon accents",
     darkdoc: "dark documentary mood, moody shadows, desaturated tones",
   };
-  return map[style] ?? map.cinematic!;
+  return map[style] ?? map["cinematic"]!;
 }
 
 function composePrompt(project: any, characters: any[], visualPrompt: string) {

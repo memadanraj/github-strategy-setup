@@ -42,7 +42,7 @@ export function YouTubePanel({ project }: { project: any }) {
     catch (e: any) { toast.error(e.message); } finally { setBusy(false); }
   }
   async function publishVideo() {
-    if (!exportId) return toast.error("Select a completed export.");
+    if (!exportId) { toast.error("Select a completed export."); return; }
     setBusy(true);
     try {
       const r = await publish({ data: {
