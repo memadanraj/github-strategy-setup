@@ -21,6 +21,7 @@ import { Route as AuthenticatedStudioSettingsRouteImport } from './routes/_authe
 import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
 import { Route as AuthenticatedStudioProjectsIndexRouteImport } from './routes/_authenticated/_studio/projects.index'
 import { Route as AuthenticatedStudioProjectsProjectIdRouteImport } from './routes/_authenticated/_studio/projects.$projectId'
+import { Route as ApiPublicPaddleWebhookRouteImport } from './routes/api/public/paddle.webhook'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -86,6 +87,11 @@ const AuthenticatedStudioProjectsProjectIdRoute =
     path: '/projects/$projectId',
     getParentRoute: () => AuthenticatedStudioRouteRoute,
   } as any)
+const ApiPublicPaddleWebhookRoute = ApiPublicPaddleWebhookRouteImport.update({
+  id: '/api/public/paddle/webhook',
+  path: '/api/public/paddle/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -97,6 +103,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedStudioSettingsRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
+  '/api/public/paddle/webhook': typeof ApiPublicPaddleWebhookRoute
   '/projects/': typeof AuthenticatedStudioProjectsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedStudioSettingsRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
+  '/api/public/paddle/webhook': typeof ApiPublicPaddleWebhookRoute
   '/projects': typeof AuthenticatedStudioProjectsIndexRoute
 }
 export interface FileRoutesById {
@@ -124,6 +132,7 @@ export interface FileRoutesById {
   '/_authenticated/_studio/settings': typeof AuthenticatedStudioSettingsRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/_authenticated/_studio/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
+  '/api/public/paddle/webhook': typeof ApiPublicPaddleWebhookRoute
   '/_authenticated/_studio/projects/': typeof AuthenticatedStudioProjectsIndexRoute
 }
 export interface FileRouteTypes {
@@ -138,6 +147,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/api/stripe/webhook'
     | '/projects/$projectId'
+    | '/api/public/paddle/webhook'
     | '/projects/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/api/stripe/webhook'
     | '/projects/$projectId'
+    | '/api/public/paddle/webhook'
     | '/projects'
   id:
     | '__root__'
@@ -164,6 +175,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_studio/settings'
     | '/api/stripe/webhook'
     | '/_authenticated/_studio/projects/$projectId'
+    | '/api/public/paddle/webhook'
     | '/_authenticated/_studio/projects/'
   fileRoutesById: FileRoutesById
 }
@@ -174,6 +186,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   YoutubeCallbackRoute: typeof YoutubeCallbackRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
+  ApiPublicPaddleWebhookRoute: typeof ApiPublicPaddleWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -262,6 +275,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStudioProjectsProjectIdRouteImport
       parentRoute: typeof AuthenticatedStudioRouteRoute
     }
+    '/api/public/paddle/webhook': {
+      id: '/api/public/paddle/webhook'
+      path: '/api/public/paddle/webhook'
+      fullPath: '/api/public/paddle/webhook'
+      preLoaderRoute: typeof ApiPublicPaddleWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -307,6 +327,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   YoutubeCallbackRoute: YoutubeCallbackRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,
+  ApiPublicPaddleWebhookRoute: ApiPublicPaddleWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
