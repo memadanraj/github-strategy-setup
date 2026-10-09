@@ -219,6 +219,42 @@ export type Database = {
           },
         ]
       }
+      credit_packs: {
+        Row: {
+          created_at: string
+          credits: number
+          id: string
+          is_active: boolean
+          name: string
+          paddle_price_id: string | null
+          price_cents: number
+          slug: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          credits: number
+          id?: string
+          is_active?: boolean
+          name: string
+          paddle_price_id?: string | null
+          price_cents: number
+          slug: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          credits?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          paddle_price_id?: string | null
+          price_cents?: number
+          slug?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       credit_transactions: {
         Row: {
           amount: number
@@ -448,6 +484,121 @@ export type Database = {
           },
         ]
       }
+      paddle_customers: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          paddle_customer_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          paddle_customer_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          paddle_customer_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paddle_customers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      paddle_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          metadata: Json
+          paddle_event_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json
+          paddle_event_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json
+          paddle_event_id?: string
+        }
+        Relationships: []
+      }
+      paddle_subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean
+          canceled_at: string | null
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          id: string
+          metadata: Json
+          paddle_customer_id: string
+          paddle_subscription_id: string
+          plan_slug: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          metadata?: Json
+          paddle_customer_id: string
+          paddle_subscription_id: string
+          plan_slug?: string
+          status: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          metadata?: Json
+          paddle_customer_id?: string
+          paddle_subscription_id?: string
+          plan_slug?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paddle_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans: {
         Row: {
           created_at: string
@@ -461,6 +612,7 @@ export type Database = {
           max_video_minutes: number | null
           monthly_credits: number
           name: string
+          paddle_price_id: string | null
           price_monthly_cents: number
           render_priority: number
           slug: string
@@ -480,6 +632,7 @@ export type Database = {
           max_video_minutes?: number | null
           monthly_credits?: number
           name: string
+          paddle_price_id?: string | null
           price_monthly_cents?: number
           render_priority?: number
           slug: string
@@ -499,6 +652,7 @@ export type Database = {
           max_video_minutes?: number | null
           monthly_credits?: number
           name?: string
+          paddle_price_id?: string | null
           price_monthly_cents?: number
           render_priority?: number
           slug?: string
