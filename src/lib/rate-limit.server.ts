@@ -1,4 +1,5 @@
-import '@tanstack/react-start/server-only';
+// Note: no 'server-only' marker here — src/start.ts is isomorphic, and the
+// function middleware below already runs exclusively on the server.
 import { createMiddleware } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 
