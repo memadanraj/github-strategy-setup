@@ -15,3 +15,11 @@
 - [x] Phase 13 Billing
 - [x] Phase 14 Admin
 - [x] Phase 15 Production hardening
+
+# Master Fix & Improve Plan (uploaded DCXORA plan)
+- [x] Phase 0 Repository audit — CURRENT_STATE.md
+- [ ] Phase 1 Foundation verification + tests
+- [ ] Phase 3 Central jobs — async clip generation
+- [ ] Creation wizard + production plan
+- [ ] Share links
+- [ ] Update outdated Stripe docs
