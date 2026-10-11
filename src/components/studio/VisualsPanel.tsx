@@ -79,27 +79,64 @@ function SceneVisual({ scene, index, project, costs }: { scene: Tables<"scenes">
   const qc = useQueryClient();
   const imgFn = useServerFn(generateSceneImage);
   const clipFn = useServerFn(generateSceneClip);
+  const checkFn = useServerFn(checkSceneClip);
   const [busy, setBusy] = useState<null | "image" | "clip">(null);
+  const [clipJob, setClipJob] = useState<string | null>(null);
   const img = useSignedUrl(scene.image_path);
   const clip = useSignedUrl(scene.clip_path);
+
+  function refresh() {
+    qc.invalidateQueries({ queryKey: ["scenes", project.id] });
+    qc.invalidateQueries({ queryKey: ["assets", project.id] });
+    qc.invalidateQueries({ queryKey: ["profile"] });
+    qc.invalidateQueries({ queryKey: ["credit_transactions"] });
+  }
+
+  // Resume a clip that was still running when the page was left.
+  useEffect(() => {
+    supabase.from("generation_jobs").select("id").eq("task_slug", "generate_clip").eq("status", "running")
+      .eq("project_id", project.id).contains("input", { sceneId: scene.id }).limit(1)
+      .then(({ data }) => { if (data?.[0]) setClipJob(data[0].id); });
+  }, [project.id, scene.id]);
+
+  useEffect(() => {
+    if (!clipJob) return;
+    let stop = false;
+    const tick = async () => {
+      if (stop) return;
+      try {
+        const r = await checkFn({ data: { jobId: clipJob } });
+        if (stop) return;
+        if (r.status === "complete") { toast.success("Clip ready"); setClipJob(null); refresh(); return; }
+        if (r.status === "failed") { toast.error(r.error); setClipJob(null); refresh(); return; }
+      } catch { /* retry next tick */ }
+      setTimeout(tick, 5000);
+    };
+    const t = setTimeout(tick, 5000);
+    return () => { stop = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clipJob]);
 
   async function run(kind: "image" | "clip") {
     setBusy(kind);
     try {
-      const fn = kind === "image" ? imgFn : clipFn;
-      const res = await fn({ data: { projectId: project.id, sceneId: scene.id } });
+      if (kind === "clip") {
+        const res = await clipFn({ data: { projectId: project.id, sceneId: scene.id } });
+        if (!res.ok) toast.error(res.error);
+        else { setClipJob(res.jobId); toast.success("Clip started — keep working, it'll appear here when ready."); }
+        return;
+      }
+      const res = await imgFn({ data: { projectId: project.id, sceneId: scene.id } });
       if (!res.ok) toast.error(res.error);
-      else toast.success(kind === "image" ? "Image ready" : "Clip ready");
+      else toast.success("Image ready");
     } catch {
       toast.error("Generation failed");
     } finally {
       setBusy(null);
-      qc.invalidateQueries({ queryKey: ["scenes", project.id] });
-      qc.invalidateQueries({ queryKey: ["assets", project.id] });
-      qc.invalidateQueries({ queryKey: ["profile"] });
-      qc.invalidateQueries({ queryKey: ["credit_transactions"] });
+      refresh();
     }
   }
+  const clipRunning = !!clipJob;
 
   const aspect = project.format === "short" ? "aspect-[9/16] max-h-80 mx-auto" : "aspect-video";
   return (
