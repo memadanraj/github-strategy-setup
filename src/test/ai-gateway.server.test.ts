@@ -108,6 +108,15 @@ describe("AI gateway streaming reliability", () => {
     });
   });
 
+  it("treats a successful HTTP response without a stream body as a provider failure", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 200 }));
+    await expect(generateStructured(options())).rejects.toMatchObject({
+      name: "AiGatewayError",
+      status: 502,
+      message: "AI generation failed.",
+    });
+  });
+
   it("bounds request timeout and maps timeout rejection to a 504", async () => {
     await expect(generateStructured(options(999))).rejects.toMatchObject({
       name: "AiGatewayError",
