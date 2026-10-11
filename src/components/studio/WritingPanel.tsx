@@ -46,19 +46,26 @@ export function WritingPanel({ project, onScenesChanged }: { project: Tables<"pr
   const [idea, setIdea] = useState(project.idea ?? "");
   useEffect(() => { setIdea(project.idea ?? ""); }, [project.idea]);
 
-  async function saveIdea() {
+  async function saveIdea(): Promise<boolean> {
     const { error } = await supabase.from("projects").update({ idea: idea.trim() }).eq("id", project.id);
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(error.message); return false; }
     toast.success("Idea saved");
-    qc.invalidateQueries({ queryKey: ["project", project.id] });
+    await qc.invalidateQueries({ queryKey: ["project", project.id] });
+    return true;
   }
 
   async function run(slug: Slug, success: string) {
     if (slug === "script_to_scenes" && !confirm("Replace all current scenes with a breakdown of this script?")) return;
     setBusy(slug);
     try {
-      if (idea.trim() !== (project.idea ?? "")) await saveIdea();
-      if (slug === "script_to_scenes" && script !== (writing?.script ?? "")) await saveScript(true);
+      if (idea.trim() !== (project.idea ?? "")) {
+        const savedIdea = await saveIdea();
+        if (!savedIdea) return;
+      }
+      if (slug === "script_to_scenes" && script !== (writing?.script ?? "")) {
+        const savedScript = await saveScript(true);
+        if (!savedScript) return;
+      }
       const res = slug === "full_script"
         ? await fns.full_script({ data: { projectId: project.id, hook: hook ?? undefined } })
         : await fns[slug]({ data: { projectId: project.id } });
@@ -75,12 +82,13 @@ export function WritingPanel({ project, onScenesChanged }: { project: Tables<"pr
     }
   }
 
-  async function saveScript(silent = false) {
+  async function saveScript(silent = false): Promise<boolean> {
     const { error } = await supabase.from("project_writing")
       .upsert({ project_id: project.id, script, updated_at: new Date().toISOString() });
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(error.message); return false; }
     if (!silent) toast.success("Script saved");
-    qc.invalidateQueries({ queryKey: key });
+    await qc.invalidateQueries({ queryKey: key });
+    return true;
   }
 
   async function applyTitle(t: string) {
