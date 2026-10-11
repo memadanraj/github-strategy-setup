@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { downloadRemoteMedia } from "./remote-media.server";
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1";
 
@@ -34,7 +35,7 @@ function clipSeconds(sceneDuration: number): "4" | "6" | "8" {
 }
 
 async function fetchMediaBytes(url: string, apiKey: string): Promise<Buffer | null> {
-  const headerOptions = [
+  const headerOptions: HeadersInit[] = [
     {},
     {
       Authorization: `Bearer ${apiKey}`,
@@ -44,21 +45,32 @@ async function fetchMediaBytes(url: string, apiKey: string): Promise<Buffer | nu
   ];
 
   for (const headers of headerOptions) {
-    const res = await fetch(url, { headers: headers as Record<string, string> });
-    if (!res.ok) continue;
-    return Buffer.from(await res.arrayBuffer());
+    try {
+      const result = await downloadRemoteMedia(url, {
+        headers,
+        timeoutMs: 45_000,
+        maxBytes: 128 * 1024 * 1024,
+        allowedContentTypes: ["image/", "video/", "application/octet-stream"],
+      });
+      return Buffer.from(result.bytes);
+    } catch {
+      // Some provider URLs require gateway credentials. Try both header variants,
+      // then allow the caller to use the provider's authenticated content endpoint.
+    }
   }
   return null;
 }
-
 async function fetchVideoContent(jobId: string, apiKey: string): Promise<Buffer> {
-  const res = await fetch(`${GATEWAY}/videos/${encodeURIComponent(jobId)}/content`, {
-    headers: gatewayHeaders(apiKey, false),
-  });
-  if (!res.ok) {
-    throw new Error(await gatewayError(res, "The generated clip could not be downloaded"));
-  }
-  return Buffer.from(await res.arrayBuffer());
+  const result = await downloadRemoteMedia(
+    `${GATEWAY}/videos/${encodeURIComponent(jobId)}/content`,
+    {
+      headers: gatewayHeaders(apiKey, false),
+      timeoutMs: 45_000,
+      maxBytes: 128 * 1024 * 1024,
+      allowedContentTypes: ["video/", "application/octet-stream"],
+    },
+  );
+  return Buffer.from(result.bytes);
 }
 
 async function buildVisualContext(supabase: any, projectId: string) {
@@ -119,7 +131,10 @@ async function generateImage(apiKey: string, model: string, prompt: string, vert
   const json = await res.json();
   const item = json.data?.[0];
 
-  if (item?.b64_json) return Buffer.from(item.b64_json, "base64");
+  if (item?.b64_json) {
+    if (item.b64_json.length > 40 * 1024 * 1024) throw new Error("Generated image exceeds the configured size limit.");
+    return Buffer.from(item.b64_json, "base64");
+  }
 
   if (item?.url) {
     const bytes = await fetchMediaBytes(item.url, apiKey);
