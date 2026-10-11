@@ -329,7 +329,7 @@ export const generateSceneImage = createServerFn({ method: "POST" })
     }),
   );
 
-const CLIP_TIMEOUT_MS = 15 * 60 * 1000;
+export const CLIP_TIMEOUT_MS = 15 * 60 * 1000;
 
 // Starts a clip in the background: reserves credits, kicks off the gateway job, returns immediately.
 export const generateSceneClip = createServerFn({ method: "POST" })
