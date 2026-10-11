@@ -310,7 +310,6 @@ async function fulfillCreditPack(
   paddleCustomerId: string | null | undefined,
   pack: { slug: string; credits: number; paddle_price_id: string | null },
   items: ReturnType<typeof extractPaddleLineItems>,
-  eventId: string,
   transactionId: string,
 ) {
   const credits = calculatePackCredits(pack, items);
@@ -330,7 +329,7 @@ async function fulfillCreditPack(
   );
 }
 
-async function processTransactionCompleted(db: any, data: any, eventId: string) {
+async function processTransactionCompleted(db: any, data: any) {
   if (!data?.id) throw new Error("Paddle transaction payload is missing its ID.");
   const items = extractPaddleLineItems(data.items);
   if (items.length === 0) throw new Error("Paddle transaction has no valid price items.");
@@ -381,7 +380,7 @@ async function processTransactionCompleted(db: any, data: any, eventId: string) 
     if (intent.item_kind === "credit_pack") {
       const pack = await getPackForIntent(db, intent);
       await bindIntent(db, intent, "fulfilled_transaction_id", data.id);
-      await fulfillCreditPack(db, intent.user_id, data.customer_id, pack, items, eventId, data.id);
+      await fulfillCreditPack(db, intent.user_id, data.customer_id, pack, items, data.id);
       return;
     }
 
@@ -402,14 +401,14 @@ async function processTransactionCompleted(db: any, data: any, eventId: string) 
   if (!pack) return;
   const userId = await getMappedUserId(db, data.customer_id);
   if (!userId) throw new Error("Credit pack transaction has no verified checkout intent or customer mapping.");
-  await fulfillCreditPack(db, userId, data.customer_id, pack, items, eventId, data.id);
+  await fulfillCreditPack(db, userId, data.customer_id, pack, items, data.id);
 }
 
 async function processPaddleEvent(db: any, event: any) {
   const data = event.data || {};
 
   if (event.event_type === "transaction.completed") {
-    await processTransactionCompleted(db, data, event.event_id);
+    await processTransactionCompleted(db, data);
     return;
   }
 
