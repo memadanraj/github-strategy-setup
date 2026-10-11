@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ImageIcon, Film, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { generateSceneImage, generateSceneClip } from "@/lib/visuals.functions";
+import { generateSceneImage, generateSceneClip, checkSceneClip } from "@/lib/visuals.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Tables } from "@/integrations/supabase/types";
@@ -79,27 +79,64 @@ function SceneVisual({ scene, index, project, costs }: { scene: Tables<"scenes">
   const qc = useQueryClient();
   const imgFn = useServerFn(generateSceneImage);
   const clipFn = useServerFn(generateSceneClip);
+  const checkFn = useServerFn(checkSceneClip);
   const [busy, setBusy] = useState<null | "image" | "clip">(null);
+  const [clipJob, setClipJob] = useState<string | null>(null);
   const img = useSignedUrl(scene.image_path);
   const clip = useSignedUrl(scene.clip_path);
+
+  function refresh() {
+    qc.invalidateQueries({ queryKey: ["scenes", project.id] });
+    qc.invalidateQueries({ queryKey: ["assets", project.id] });
+    qc.invalidateQueries({ queryKey: ["profile"] });
+    qc.invalidateQueries({ queryKey: ["credit_transactions"] });
+  }
+
+  // Resume a clip that was still running when the page was left.
+  useEffect(() => {
+    supabase.from("generation_jobs").select("id").eq("task_slug", "generate_clip").eq("status", "running")
+      .eq("project_id", project.id).contains("input", { sceneId: scene.id }).limit(1)
+      .then(({ data }) => { if (data?.[0]) setClipJob(data[0].id); });
+  }, [project.id, scene.id]);
+
+  useEffect(() => {
+    if (!clipJob) return;
+    let stop = false;
+    const tick = async () => {
+      if (stop) return;
+      try {
+        const r = await checkFn({ data: { jobId: clipJob } });
+        if (stop) return;
+        if (r.status === "complete") { toast.success("Clip ready"); setClipJob(null); refresh(); return; }
+        if (r.status === "failed") { toast.error(r.error); setClipJob(null); refresh(); return; }
+      } catch { /* retry next tick */ }
+      setTimeout(tick, 5000);
+    };
+    const t = setTimeout(tick, 5000);
+    return () => { stop = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clipJob]);
 
   async function run(kind: "image" | "clip") {
     setBusy(kind);
     try {
-      const fn = kind === "image" ? imgFn : clipFn;
-      const res = await fn({ data: { projectId: project.id, sceneId: scene.id } });
+      if (kind === "clip") {
+        const res = await clipFn({ data: { projectId: project.id, sceneId: scene.id } });
+        if (!res.ok) toast.error(res.error);
+        else { setClipJob(res.jobId); toast.success("Clip started — keep working, it'll appear here when ready."); }
+        return;
+      }
+      const res = await imgFn({ data: { projectId: project.id, sceneId: scene.id } });
       if (!res.ok) toast.error(res.error);
-      else toast.success(kind === "image" ? "Image ready" : "Clip ready");
+      else toast.success("Image ready");
     } catch {
       toast.error("Generation failed");
     } finally {
       setBusy(null);
-      qc.invalidateQueries({ queryKey: ["scenes", project.id] });
-      qc.invalidateQueries({ queryKey: ["assets", project.id] });
-      qc.invalidateQueries({ queryKey: ["profile"] });
-      qc.invalidateQueries({ queryKey: ["credit_transactions"] });
+      refresh();
     }
   }
+  const clipRunning = !!clipJob;
 
   const aspect = project.format === "short" ? "aspect-[9/16] max-h-80 mx-auto" : "aspect-video";
   return (
@@ -107,7 +144,7 @@ function SceneVisual({ scene, index, project, costs }: { scene: Tables<"scenes">
       <div className={`${aspect} overflow-hidden rounded-lg bg-surface-raised`}>
         {clip.data ? <video src={clip.data} controls className="size-full object-cover" />
           : img.data ? <img src={img.data} alt={scene.title} className="size-full object-cover" />
-          : <div className="flex size-full items-center justify-center text-xs text-muted-foreground">{busy ? "Generating…" : "No visual yet"}</div>}
+          : <div className="flex size-full items-center justify-center text-xs text-muted-foreground">{busy || clipRunning ? "Generating…" : "No visual yet"}</div>}
       </div>
       <p className="mt-2 text-sm font-semibold"><span className="font-mono text-xs text-signal">{String(index + 1).padStart(2, "0")}</span> {scene.title}</p>
       <p className="line-clamp-2 text-xs text-muted-foreground">{scene.visual_prompt || "No visual description — add one in Scenes."}</p>
@@ -115,8 +152,8 @@ function SceneVisual({ scene, index, project, costs }: { scene: Tables<"scenes">
         <Button size="sm" variant="panel" disabled={!!busy || !scene.visual_prompt} onClick={() => run("image")}>
           {busy === "image" ? <Loader2 className="animate-spin" /> : <ImageIcon />} Image · {costs?.["generate_image"] ?? "…"} cr
         </Button>
-        <Button size="sm" variant="panel" disabled={!!busy || !scene.visual_prompt} onClick={() => run("clip")}>
-          {busy === "clip" ? <Loader2 className="animate-spin" /> : <Film />} Clip · {costs?.["generate_clip"] ?? "…"} cr
+        <Button size="sm" variant="panel" disabled={!!busy || clipRunning || !scene.visual_prompt} onClick={() => run("clip")}>
+          {busy === "clip" || clipRunning ? <Loader2 className="animate-spin" /> : <Film />} Clip · {costs?.["generate_clip"] ?? "…"} cr
         </Button>
       </div>
     </div>
