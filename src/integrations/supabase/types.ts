@@ -695,6 +695,51 @@ export type Database = {
         }
         Relationships: []
       }
+      project_share_links: {
+        Row: {
+          created_at: string;
+          export_id: string;
+          expires_at: string | null;
+          failed_password_attempts: number;
+          id: string;
+          locked_until: string | null;
+          password_hash: string | null;
+          password_salt: string | null;
+          project_id: string;
+          revoked_at: string | null;
+          token_hash: string;
+        };
+        Insert: {
+          created_at?: string;
+          export_id: string;
+          expires_at?: string | null;
+          failed_password_attempts?: number;
+          id?: string;
+          locked_until?: string | null;
+          password_hash?: string | null;
+          password_salt?: string | null;
+          project_id: string;
+          revoked_at?: string | null;
+          token_hash: string;
+        };
+        Update: {
+          created_at?: string;
+          export_id?: string;
+          expires_at?: string | null;
+          failed_password_attempts?: number;
+          id?: string;
+          locked_until?: string | null;
+          password_hash?: string | null;
+          password_salt?: string | null;
+          project_id?: string;
+          revoked_at?: string | null;
+          token_hash?: string;
+        };
+        Relationships: [
+          { foreignKeyName: "project_share_links_export_id_fkey"; columns: ["export_id"]; isOneToOne: false; referencedRelation: "exports"; referencedColumns: ["id"]; },
+          { foreignKeyName: "project_share_links_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"]; }
+        ];
+      }
       project_versions: {
         Row: {
           created_at: string
@@ -1518,6 +1563,10 @@ export type Database = {
       start_generation_job: {
         Args: { _input: Json; _project_id: string; _task_slug: string }
         Returns: string
+      }
+      record_project_share_password_failure: {
+        Args: { _share_id: string }
+        Returns: { failed_attempts: number; locked_until: string | null }[]
       }
     }
     Enums: {
