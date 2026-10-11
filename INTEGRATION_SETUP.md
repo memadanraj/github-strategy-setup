@@ -36,6 +36,8 @@ Before applying a SQL migration to an existing database:
 
 The `0012_fix_ai_media_models.sql` migration aligns stored media model identifiers for existing installations and must be applied where the older identifiers are still present.
 
+The `0013_job_pipeline_hardening.sql` migration adds generation-job event history, an atomic download claim to prevent duplicate clip persistence, duplicate-active-clip protection, and idempotent job completion/failure/refund functions. **Apply and verify this migration in staging before deploying application code that calls `claim_generation_job_download`.** The repository's Drizzle journal does not currently list all existing SQL files, so do not assume a generic Drizzle migration command will apply the complete history. Confirm the managed migration process used by your database, check its applied-migration records, back up the database, then apply only missing migrations in staging.
+
 ## 3. AI Gateway
 
 Set the server-only secret:
