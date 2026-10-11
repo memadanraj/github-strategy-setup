@@ -91,7 +91,7 @@ export async function generateStructured<T>(opts: {
     try { await res.body?.cancel(); } catch { /* best-effort cleanup */ }
     if (res.status === 429) throw new AiGatewayError("AI is busy right now. Please try again shortly.", 429);
     if (res.status === 402) throw new AiGatewayError("AI credits for this workspace are exhausted.", 402);
-    throw new AiGatewayError("AI generation failed.", res.status || 502);
+    throw new AiGatewayError("AI generation failed.", res.ok ? 502 : res.status);
   }
 
   const reader = res.body.getReader();
