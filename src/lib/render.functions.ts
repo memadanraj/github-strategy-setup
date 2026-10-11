@@ -4,7 +4,9 @@ import {requireSupabaseAuth} from "@/integrations/supabase/auth-middleware";
 import {getRenderProvider,type RenderManifest} from "./render.providers.server";
 async function adm():Promise<any>{return (await import("@/integrations/supabase/client.server")).supabaseAdmin}
 async function signManifest(admin:any,m:RenderManifest){
- const paths=new Set<string>();m.assets.forEach((a:any)=>a.storage_path&&paths.add(a.storage_path));m.scenes.forEach((s:any)=>{s.image_path&&paths.add(s.image_path);s.clip_path&&paths.add(s.clip_path)});
+ const paths=new Set<string>();
+ for (const asset of m.assets) { if (asset.storage_path) paths.add(asset.storage_path); }
+ for (const scene of m.scenes) { if (scene.image_path) paths.add(scene.image_path); if (scene.clip_path) paths.add(scene.clip_path); }
  const list=[...paths];const urls=new Map<string,string>();
  if(list.length){const r=await admin.storage.from("project-assets").createSignedUrls(list,86400);if(r.error)throw new Error("Couldn't prepare project files for rendering");(r.data||[]).forEach((x:any)=>x.signedUrl&&x.path&&urls.set(x.path,x.signedUrl))}
  m.assets.forEach((a:any)=>{a.url=urls.get(a.storage_path)});m.scenes.forEach((s:any)=>{s.image_url=s.image_path?urls.get(s.image_path):undefined;s.clip_url=s.clip_path?urls.get(s.clip_path):undefined});
