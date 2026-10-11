@@ -66,6 +66,41 @@ describe("NewProjectDialog failure handling", () => {
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
+  it("persists the selected production brief and plan with the project", async () => {
+    let insertPayload: Record<string, unknown> | undefined;
+    mocks.authGetUser.mockResolvedValueOnce({ data: { user: { id: "user-1" } }, error: null });
+    mocks.insert.mockImplementation((payload: Record<string, unknown>) => {
+      insertPayload = payload;
+      return {
+        select: () => ({
+          single: () => Promise.resolve({ data: { id: "project-1" }, error: null }),
+        }),
+      };
+    });
+    render(<NewProjectDialog><button>Open dialog</button></NewProjectDialog>);
+
+    fireEvent.change(screen.getByLabelText("Target duration (seconds)"), { target: { value: "600" } });
+    fireEvent.change(screen.getByLabelText("Target audience"), { target: { value: "New creators" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/projects/$projectId",
+      params: { projectId: "project-1" },
+    }));
+    expect(insertPayload).toMatchObject({
+      settings: {
+        schemaVersion: 1,
+        brief: {
+          targetAudience: "New creators",
+          targetDurationSeconds: 600,
+          aspectRatio: "16:9",
+        },
+        plan: { stages: expect.arrayContaining(["Render, inspect, and export the final video"]) },
+      },
+      visual_style: "cinematic",
+    });
+  });
+
   it("does not navigate or report success when the project insert fails", async () => {
     mocks.authGetUser.mockResolvedValueOnce({ data: { user: { id: "user-1" } }, error: null });
     mocks.insert.mockReturnValue({
