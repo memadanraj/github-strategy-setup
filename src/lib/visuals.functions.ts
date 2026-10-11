@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { downloadRemoteMedia, remoteMediaHeaderVariants } from "./remote-media.server";
+import { normalizeProviderVideoStatus, readProviderJobId, readProviderVideoError, readProviderVideoUrl } from "./video-job-contract";
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1";
 
@@ -412,11 +413,12 @@ export const generateSceneClip = createServerFn({ method: "POST" })
         }),
       });
       if (!start.ok) throw new Error(await gatewayError(start, "Clip generation failed to start"));
-      const job = await start.json();
-      if (!job.id) throw new Error("Clip generation failed to start.");
+      const job = await start.json().catch(() => null);
+      const providerJobId = readProviderJobId(job);
+      if (!providerJobId) throw new Error("Clip generation failed to start: gateway returned no valid job ID.");
       const { error: providerJobWriteError } = await supabaseAdmin
         .from("generation_jobs")
-        .update({ output: { provider_job_id: job.id } })
+        .update({ output: { provider_job_id: providerJobId } })
         .eq("id", jobId as string);
       if (providerJobWriteError) {
         throw new Error("Clip started, but its provider job ID could not be saved. The job was failed to avoid a stuck credit reservation.");
@@ -464,10 +466,11 @@ export const checkSceneClip = createServerFn({ method: "POST" })
         return fail(await gatewayError(poll, "Clip status check failed"));
       }
       const info = await poll.json().catch(() => ({}));
-      if (info.status === "failed" || info.status === "error" || info.status === "cancelled") {
-        return fail(info.error?.message ?? (typeof info.error === "string" ? info.error : "Clip generation failed."));
+      const providerStatus = normalizeProviderVideoStatus(info.status);
+      if (providerStatus === "failed") {
+        return fail(readProviderVideoError(info) ?? "Clip generation failed.");
       }
-      if (info.status !== "completed" && info.status !== "succeeded") return { status: "running" as const };
+      if (providerStatus !== "completed") return { status: "running" as const };
 
       // Only one poll request may download and persist this provider result.
       const jobDownloadRpc = supabaseAdmin as unknown as {
@@ -483,7 +486,7 @@ export const checkSceneClip = createServerFn({ method: "POST" })
       if (claimError) throw new Error("Couldn't claim the clip download stage.");
       if (!claimed) return { status: "running" as const };
 
-      const url: string | undefined = info.url ?? info.video_url ?? info.video?.url ?? info.output?.url;
+      const url = readProviderVideoUrl(info);
       const bytes = (url ? await fetchMediaBytes(url, apiKey) : null) ?? (await fetchVideoContent(providerId, apiKey));
       const sceneId = job.input?.sceneId as string | undefined;
       if (!sceneId) throw new Error("Clip job is missing its scene reference.");
