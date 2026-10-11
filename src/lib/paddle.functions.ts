@@ -3,6 +3,58 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { admin, paddleApi, paddleEnv } from "./paddle.server";
 
+export const preparePaddleCheckout = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({
+      kind: z.enum(["subscription", "credit_pack"]),
+      slug: z.string().trim().min(1).max(80),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const db: any = await admin();
+    let priceId: string | null = null;
+
+    if (data.kind === "subscription") {
+      if (data.slug === "free") throw new Error("The Free plan does not require checkout.");
+      const { data: plan, error } = await db
+        .from("plans")
+        .select("slug,paddle_price_id,is_active")
+        .eq("slug", data.slug)
+        .maybeSingle();
+      if (error || !plan?.is_active) throw new Error("Plan not found or inactive.");
+      priceId = plan.paddle_price_id;
+    } else {
+      const { data: pack, error } = await db
+        .from("credit_packs")
+        .select("slug,paddle_price_id,is_active")
+        .eq("slug", data.slug)
+        .maybeSingle();
+      if (error || !pack?.is_active) throw new Error("Credit pack not found or inactive.");
+      priceId = pack.paddle_price_id;
+    }
+
+    if (!priceId) throw new Error("This item is not connected to a Paddle price yet.");
+
+    const intent = await db
+      .from("paddle_checkout_intents")
+      .insert({
+        user_id: context.userId,
+        item_kind: data.kind,
+        item_slug: data.slug,
+        paddle_price_id: priceId,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .select("id")
+      .single();
+
+    if (intent.error || !intent.data?.id) {
+      throw new Error("Couldn't prepare a secure Paddle checkout.");
+    }
+
+    return { intentId: intent.data.id as string, priceId: priceId as string };
+  });
+
 // Public client token for Paddle.js overlay checkout (safe to expose; it is a
 // publishable client-side token, not the secret API key).
 export const getPaddleClientConfig = createServerFn({ method: "GET" })

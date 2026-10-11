@@ -13,11 +13,15 @@ import { TimelinePanel } from "@/components/studio/TimelinePanel";
 import { RenderPanel } from "@/components/studio/RenderPanel";
 import { ThumbnailPanel } from "@/components/studio/ThumbnailPanel";
 import { YouTubePanel } from "@/components/studio/YouTubePanel";
+import { SharePanel } from "@/components/studio/SharePanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { statusLabel } from "@/lib/studio";
+import { createProjectVersion, restoreProjectVersion } from "@/lib/project-versions";
 import type { Tables } from "@/integrations/supabase/types";
+import { safeProjectAssetFileName, validateProjectAssetFile } from "@/lib/project-assets";
+import { canMoveScene, createProjectScene, deleteProjectScene, moveProjectScene } from "@/lib/project-scenes";
 
 export const Route = createFileRoute("/_authenticated/_studio/projects/$projectId")({
   head: () => ({
@@ -64,7 +68,7 @@ const versionsQ = (id: string) => queryOptions({
   },
 });
 
-type Tab = "writing" | "scenes" | "visuals" | "audio" | "timeline" | "thumbnail" | "render" | "youtube" | "assets" | "versions";
+type Tab = "writing" | "scenes" | "visuals" | "audio" | "timeline" | "thumbnail" | "render" | "youtube" | "assets" | "versions" | "share";
 
 function ProjectPage() {
   const { projectId } = Route.useParams();
@@ -88,7 +92,7 @@ function ProjectPage() {
       </div>
       {project.idea && <p className="mt-3 max-w-2xl text-muted-foreground">{project.idea}</p>}
       <div className="mt-6 flex gap-1 border-b border-border">
-        {(["writing", "scenes", "visuals", "audio", "timeline", "thumbnail", "render", "youtube", "assets", "versions"] as Tab[]).map((t) => (
+        {(["writing", "scenes", "visuals", "audio", "timeline", "thumbnail", "render", "youtube", "assets", "versions", "share"] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm capitalize ${tab === t ? "border-signal text-foreground" : "border-transparent text-muted-foreground"}`}>
             {t}
@@ -106,6 +110,7 @@ function ProjectPage() {
         {tab === "youtube" && <YouTubePanel project={project} />}
         {tab === "assets" && <Assets project={project} />}
         {tab === "versions" && <Versions project={project} />}
+        {tab === "share" && <SharePanel project={project} />}
       </div>
     </div>
   );
@@ -127,23 +132,43 @@ function Scenes({ projectId }: { projectId: string }) {
   });
 
   async function add() {
-    const { error } = await supabase.from("scenes").insert({ project_id: projectId, position: scenes.length, title: `Scene ${scenes.length + 1}` });
-    if (error) { toast.error(error.message); return; }
-    refresh();
+    try {
+      await createProjectScene(
+        (args) => supabase.rpc("create_project_scene", args),
+        projectId,
+        `Scene ${scenes.length + 1}`,
+      );
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create scene. Please try again.");
+    }
   }
   async function move(i: number, dir: -1 | 1) {
-    const a = scenes[i], b = scenes[i + dir];
-    if (!a || !b) return;
-    await Promise.all([
-      supabase.from("scenes").update({ position: b.position }).eq("id", a.id),
-      supabase.from("scenes").update({ position: a.position }).eq("id", b.id),
-    ]);
-    refresh();
+    const scene = scenes[i];
+    if (!scene || !canMoveScene(i, dir, scenes.length)) return;
+    try {
+      await moveProjectScene(
+        (args) => supabase.rpc("move_project_scene", args),
+        projectId,
+        scene.id,
+        dir,
+      );
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not reorder scenes. Please try again.");
+    }
   }
   async function remove(id: string) {
-    const { error } = await supabase.from("scenes").delete().eq("id", id);
-    if (error) { toast.error(error.message); return; }
-    refresh();
+    try {
+      await deleteProjectScene(
+        (args) => supabase.rpc("delete_project_scene", args),
+        projectId,
+        id,
+      );
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete scene. Please try again.");
+    }
   }
 
   async function draftWithAi() {
@@ -179,7 +204,7 @@ function Scenes({ projectId }: { projectId: string }) {
       ) : (
         <div className="space-y-3">
           {scenes.map((s, i) => (
-            <SceneRow key={s.id} scene={s} index={i} last={i === scenes.length - 1}
+            <SceneRow key={`${s.id}:${s.updated_at}`} scene={s} index={i} last={i === scenes.length - 1}
               onMove={(d) => move(i, d)} onDelete={() => remove(s.id)} onSaved={refresh} />
           ))}
         </div>
@@ -245,18 +270,62 @@ function Assets({ project }: { project: Tables<"projects"> }) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+
+    const validationError = validateProjectAssetFile(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
     setBusy(true);
-    const path = `${project.user_id}/${project.id}/${crypto.randomUUID()}-${file.name}`;
-    const up = await supabase.storage.from("project-assets").upload(path, file, { contentType: file.type });
-    if (up.error) { setBusy(false); { toast.error(up.error.message); return; } }
-    const { error } = await supabase.from("assets").insert({
-      project_id: project.id, kind: kindOf(file.type), name: file.name, storage_path: path,
-      meta: { size: file.size, type: file.type },
-    });
-    setBusy(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Uploaded");
-    refresh();
+    let uploadedPath: string | null = null;
+    try {
+      const safeName = safeProjectAssetFileName(file.name);
+      const path = `${project.user_id}/${project.id}/${crypto.randomUUID()}-${safeName}`;
+      const uploadResult = await supabase.storage
+        .from("project-assets")
+        .upload(path, file, { contentType: file.type });
+
+      if (uploadResult.error) {
+        toast.error(uploadResult.error.message);
+        return;
+      }
+      uploadedPath = path;
+
+      const { error } = await supabase.from("assets").insert({
+        project_id: project.id,
+        kind: kindOf(file.type),
+        name: file.name.slice(0, 255),
+        storage_path: path,
+        meta: { size: file.size, type: file.type },
+      });
+
+      if (error) {
+        const cleanup = await supabase.storage.from("project-assets").remove([path]);
+        if (cleanup.error) {
+          toast.error(`Couldn't save the asset record, and its uploaded file could not be cleaned up. Contact support with project ID ${project.id}.`);
+          return;
+        }
+        uploadedPath = null;
+        toast.error(error.message);
+        return;
+      }
+
+      uploadedPath = null;
+      toast.success("Uploaded");
+      await refresh();
+    } catch {
+      if (uploadedPath) {
+        const cleanup = await supabase.storage.from("project-assets").remove([uploadedPath]);
+        if (cleanup.error) {
+          toast.error("Upload failed, and temporary-file cleanup also failed. Please contact support.");
+          return;
+        }
+      }
+      toast.error("Upload failed. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function open(a: Tables<"assets">) {
@@ -267,10 +336,24 @@ function Assets({ project }: { project: Tables<"projects"> }) {
   }
 
   async function remove(a: Tables<"assets">) {
-    if (a.storage_path) await supabase.storage.from("project-assets").remove([a.storage_path]);
-    const { error } = await supabase.from("assets").delete().eq("id", a.id);
-    if (error) { toast.error(error.message); return; }
-    refresh();
+    try {
+      if (a.storage_path) {
+        const storageResult = await supabase.storage.from("project-assets").remove([a.storage_path]);
+        if (storageResult.error) {
+          toast.error(`Couldn't remove the file: ${storageResult.error.message}`);
+          return;
+        }
+      }
+
+      const { error } = await supabase.from("assets").delete().eq("id", a.id);
+      if (error) {
+        toast.error("The file was removed, but its asset record could not be deleted. Retry deleting this asset.");
+        return;
+      }
+      await refresh();
+    } catch {
+      toast.error("Couldn't delete this asset. Please check your connection and try again.");
+    }
   }
 
   return (
@@ -307,30 +390,37 @@ function Versions({ project }: { project: Tables<"projects"> }) {
   const [label, setLabel] = useState("");
 
   async function snapshot() {
-    const { data: scenes, error: se } = await supabase.from("scenes").select("title,narration,visual_prompt,duration_seconds,position").eq("project_id", project.id).order("position");
-    if (se) { toast.error(se.message); return; }
-    const next = (versions[0]?.version_number ?? 0) + 1;
-    const { error } = await supabase.from("project_versions").insert({
-      project_id: project.id, version_number: next, label: label.trim() || null,
-      snapshot: { title: project.title, idea: project.idea, scenes: scenes ?? [] },
-    });
-    if (error) { toast.error(error.message); return; }
-    setLabel("");
-    toast.success(`Saved version ${next}`);
-    qc.invalidateQueries({ queryKey: ["versions", project.id] });
+    try {
+      const result = await createProjectVersion(
+        (args) => supabase.rpc("create_project_version", args),
+        project.id,
+        label,
+      );
+      setLabel("");
+      toast.success(`Saved version ${result.versionNumber}`);
+      await qc.invalidateQueries({ queryKey: ["versions", project.id] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't save project version.");
+    }
   }
 
   async function restore(v: Tables<"project_versions">) {
-    if (!confirm(`Restore version ${v.version_number}? Current scenes will be replaced.`)) return;
-    const snap = v.snapshot as { scenes?: Array<{ title: string; narration: string | null; visual_prompt: string | null; duration_seconds: number; position: number }> };
-    const del = await supabase.from("scenes").delete().eq("project_id", project.id);
-    if (del.error) { toast.error(del.error.message); return; }
-    if (snap.scenes?.length) {
-      const { error } = await supabase.from("scenes").insert(snap.scenes.map((s) => ({ ...s, project_id: project.id })));
-      if (error) { toast.error(error.message); return; }
+    if (!confirm(`Restore version ${v.version_number}? Project details and scenes in this version will be restored.`)) return;
+    try {
+      await restoreProjectVersion(
+        (args) => supabase.rpc("restore_project_version", args),
+        project.id,
+        v.id,
+      );
+      toast.success(`Restored version ${v.version_number}`);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["project", project.id] }),
+        qc.invalidateQueries({ queryKey: ["scenes", project.id] }),
+        qc.invalidateQueries({ queryKey: ["versions", project.id] }),
+      ]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't restore project version. Your current data was preserved.");
     }
-    toast.success(`Restored version ${v.version_number}`);
-    qc.invalidateQueries({ queryKey: ["scenes", project.id] });
   }
 
   return (

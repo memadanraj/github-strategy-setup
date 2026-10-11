@@ -21,6 +21,7 @@ import { Route as AuthenticatedStudioSettingsRouteImport } from './routes/_authe
 import { Route as AuthenticatedStudioProjectsIndexRouteImport } from './routes/_authenticated/_studio/projects.index'
 import { Route as AuthenticatedStudioProjectsProjectIdRouteImport } from './routes/_authenticated/_studio/projects.$projectId'
 import { Route as ApiPublicPaddleWebhookRouteImport } from './routes/api/public/paddle.webhook'
+import { Route as ShareTokenRouteImport } from './routes/share.$token'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -86,6 +87,11 @@ const ApiPublicPaddleWebhookRoute = ApiPublicPaddleWebhookRouteImport.update({
   path: '/api/public/paddle/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -97,6 +103,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedStudioSettingsRoute
   '/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
   '/api/public/paddle/webhook': typeof ApiPublicPaddleWebhookRoute
+  '/share/$token': typeof ShareTokenRoute
   '/projects/': typeof AuthenticatedStudioProjectsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedStudioSettingsRoute
   '/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
   '/api/public/paddle/webhook': typeof ApiPublicPaddleWebhookRoute
+  '/share/$token': typeof ShareTokenRoute
   '/projects': typeof AuthenticatedStudioProjectsIndexRoute
 }
 export interface FileRoutesById {
@@ -124,6 +132,7 @@ export interface FileRoutesById {
   '/_authenticated/_studio/settings': typeof AuthenticatedStudioSettingsRoute
   '/_authenticated/_studio/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
   '/api/public/paddle/webhook': typeof ApiPublicPaddleWebhookRoute
+  '/share/$token': typeof ShareTokenRoute
   '/_authenticated/_studio/projects/': typeof AuthenticatedStudioProjectsIndexRoute
 }
 export interface FileRouteTypes {
@@ -138,6 +147,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/projects/$projectId'
     | '/api/public/paddle/webhook'
+    | '/share/$token'
     | '/projects/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/projects/$projectId'
     | '/api/public/paddle/webhook'
+    | '/share/$token'
     | '/projects'
   id:
     | '__root__'
@@ -164,6 +175,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_studio/settings'
     | '/_authenticated/_studio/projects/$projectId'
     | '/api/public/paddle/webhook'
+    | '/share/$token'
     | '/_authenticated/_studio/projects/'
   fileRoutesById: FileRoutesById
 }
@@ -174,6 +186,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   YoutubeCallbackRoute: typeof YoutubeCallbackRoute
   ApiPublicPaddleWebhookRoute: typeof ApiPublicPaddleWebhookRoute
+  ShareTokenRoute: typeof ShareTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -262,6 +275,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPaddleWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -307,6 +327,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   YoutubeCallbackRoute: YoutubeCallbackRoute,
   ApiPublicPaddleWebhookRoute: ApiPublicPaddleWebhookRoute,
+  ShareTokenRoute: ShareTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

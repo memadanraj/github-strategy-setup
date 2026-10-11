@@ -16,6 +16,7 @@ create table if not exists public.youtube_connections (
 grant select,insert,update,delete on public.youtube_connections to authenticated;
 grant all on public.youtube_connections to service_role;
 alter table public.youtube_connections enable row level security;
+drop policy if exists "Users read own YouTube connection" on public.youtube_connections;
 create policy "Users read own YouTube connection" on public.youtube_connections for select to authenticated using (auth.uid()=user_id);
 
 create table if not exists public.youtube_oauth_states (
@@ -53,7 +54,9 @@ create table if not exists public.youtube_publications (
 grant select,insert,update on public.youtube_publications to authenticated;
 grant all on public.youtube_publications to service_role;
 alter table public.youtube_publications enable row level security;
+drop policy if exists "Users read own YouTube publications" on public.youtube_publications;
 create policy "Users read own YouTube publications" on public.youtube_publications for select to authenticated using (auth.uid()=user_id);
+drop policy if exists "Users create own YouTube publications" on public.youtube_publications;
 create policy "Users create own YouTube publications" on public.youtube_publications for insert to authenticated with check (auth.uid()=user_id and public.owns_project(project_id));
 create index if not exists youtube_publications_project_idx on public.youtube_publications(project_id, created_at desc);
 
@@ -78,5 +81,6 @@ create table if not exists public.youtube_analytics_daily (
 grant select on public.youtube_analytics_daily to authenticated;
 grant all on public.youtube_analytics_daily to service_role;
 alter table public.youtube_analytics_daily enable row level security;
+drop policy if exists "Users read own YouTube analytics" on public.youtube_analytics_daily;
 create policy "Users read own YouTube analytics" on public.youtube_analytics_daily for select to authenticated using (auth.uid()=user_id);
 create index if not exists youtube_analytics_daily_user_day_idx on public.youtube_analytics_daily(user_id, day desc);

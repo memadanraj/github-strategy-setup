@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { downloadRemoteMedia, remoteMediaHeaderVariants } from "./remote-media.server";
+import { normalizeProviderVideoStatus, readProviderJobId, readProviderVideoError, readProviderVideoUrl } from "./video-job-contract";
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1";
 
@@ -34,31 +36,43 @@ function clipSeconds(sceneDuration: number): "4" | "6" | "8" {
 }
 
 async function fetchMediaBytes(url: string, apiKey: string): Promise<Buffer | null> {
-  const headerOptions = [
-    {},
-    {
-      Authorization: `Bearer ${apiKey}`,
-      "Lovable-API-Key": apiKey,
-      "X-Lovable-AIG-SDK": "tanstack-ai",
-    },
-  ];
+  // Provider-supplied output URLs are untrusted. Never send gateway secrets to
+  // arbitrary CDNs or attacker-controlled URLs; credentials are only appropriate
+  // for the gateway's own origin.
+  const headerOptions = remoteMediaHeaderVariants(url, GATEWAY, {
+    Authorization: `Bearer ${apiKey}`,
+    "Lovable-API-Key": apiKey,
+    "X-Lovable-AIG-SDK": "tanstack-ai",
+  });
+  if (headerOptions.length === 0) return null;
 
   for (const headers of headerOptions) {
-    const res = await fetch(url, { headers: headers as Record<string, string> });
-    if (!res.ok) continue;
-    return Buffer.from(await res.arrayBuffer());
+    try {
+      const result = await downloadRemoteMedia(url, {
+        headers,
+        timeoutMs: 45_000,
+        maxBytes: 128 * 1024 * 1024,
+        allowedContentTypes: ["image/", "video/", "application/octet-stream"],
+      });
+      return Buffer.from(result.bytes);
+    } catch {
+      // Some provider URLs require gateway credentials. Try both header variants,
+      // then allow the caller to use the provider's authenticated content endpoint.
+    }
   }
   return null;
 }
-
 async function fetchVideoContent(jobId: string, apiKey: string): Promise<Buffer> {
-  const res = await fetch(`${GATEWAY}/videos/${encodeURIComponent(jobId)}/content`, {
-    headers: gatewayHeaders(apiKey, false),
-  });
-  if (!res.ok) {
-    throw new Error(await gatewayError(res, "The generated clip could not be downloaded"));
-  }
-  return Buffer.from(await res.arrayBuffer());
+  const result = await downloadRemoteMedia(
+    `${GATEWAY}/videos/${encodeURIComponent(jobId)}/content`,
+    {
+      headers: gatewayHeaders(apiKey, false),
+      timeoutMs: 45_000,
+      maxBytes: 128 * 1024 * 1024,
+      allowedContentTypes: ["video/", "application/octet-stream"],
+    },
+  );
+  return Buffer.from(result.bytes);
 }
 
 async function buildVisualContext(supabase: any, projectId: string) {
@@ -119,7 +133,10 @@ async function generateImage(apiKey: string, model: string, prompt: string, vert
   const json = await res.json();
   const item = json.data?.[0];
 
-  if (item?.b64_json) return Buffer.from(item.b64_json, "base64");
+  if (item?.b64_json) {
+    if (item.b64_json.length > 40 * 1024 * 1024) throw new Error("Generated image exceeds the configured size limit.");
+    return Buffer.from(item.b64_json, "base64");
+  }
 
   if (item?.url) {
     const bytes = await fetchMediaBytes(item.url, apiKey);
@@ -127,72 +144,6 @@ async function generateImage(apiKey: string, model: string, prompt: string, vert
   }
 
   throw new Error("AI returned no downloadable image.");
-}
-
-async function generateClip(
-  apiKey: string,
-  model: string,
-  prompt: string,
-  durationSeconds: number,
-  vertical: boolean,
-): Promise<Buffer> {
-  const start = await fetch(`${GATEWAY}/videos`, {
-    method: "POST",
-    headers: gatewayHeaders(apiKey),
-    body: JSON.stringify({
-      model,
-      prompt,
-      size: vertical ? "720x1280" : "1280x720",
-      seconds: clipSeconds(durationSeconds),
-    }),
-  });
-
-  if (!start.ok) {
-    throw new Error(await gatewayError(start, "Clip generation failed to start"));
-  }
-
-  const job = await start.json();
-  const id = job.id;
-
-  if (!id) throw new Error("Clip generation failed to start: gateway returned no job ID.");
-
-  const deadline = Date.now() + 10 * 60 * 1000;
-
-  for (;;) {
-    await new Promise((resolve) => setTimeout(resolve, 5000));
-
-    const poll = await fetch(`${GATEWAY}/videos/${encodeURIComponent(id)}`, {
-      headers: gatewayHeaders(apiKey, false),
-    });
-    const info = await poll.json().catch(() => ({}));
-
-    if (!poll.ok) {
-      throw new Error(await gatewayError(poll, "Clip status check failed"));
-    }
-
-    if (info.status === "completed" || info.status === "succeeded") {
-      const url: string | undefined =
-        info.url ??
-        info.video_url ??
-        info.video?.url ??
-        info.output?.url;
-
-      if (url) {
-        const bytes = await fetchMediaBytes(url, apiKey);
-        if (bytes) return bytes;
-      }
-
-      return fetchVideoContent(id, apiKey);
-    }
-
-    if (info.status === "failed" || info.status === "error" || info.status === "cancelled") {
-      throw new Error(info.error?.message ?? info.error ?? "Clip generation failed.");
-    }
-
-    if (Date.now() > deadline) {
-      throw new Error("Clip generation timed out after 10 minutes.");
-    }
-  }
 }
 
 async function runVisualJob(opts: {
@@ -357,7 +308,28 @@ export const generateSceneClip = createServerFn({ method: "POST" })
       _task_slug: "generate_clip", _project_id: data.projectId, _input: { sceneId: data.sceneId },
     });
     if (je || !jobId) {
-      return { ok: false as const, error: je?.message?.includes("INSUFFICIENT_CREDITS") ? "Not enough credits." : "Couldn't start the AI job." };
+      // A concurrent request can win between the initial active-job lookup and
+      // the credit-reserving RPC. Reuse that active job instead of charging or
+      // surfacing a false failure to the second tab.
+      if (je?.message?.includes("JOB_ALREADY_ACTIVE")) {
+        const { data: active } = await supabase
+          .from("generation_jobs")
+          .select("id")
+          .eq("task_slug", "generate_clip")
+          .eq("status", "running")
+          .eq("project_id", data.projectId)
+          .contains("input", { sceneId: data.sceneId })
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (active?.id) return { ok: true as const, jobId: active.id as string };
+      }
+      return {
+        ok: false as const,
+        error: je?.message?.includes("INSUFFICIENT_CREDITS")
+          ? "Not enough credits."
+          : "Couldn't start the AI job.",
+      };
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     try {
@@ -375,9 +347,16 @@ export const generateSceneClip = createServerFn({ method: "POST" })
         }),
       });
       if (!start.ok) throw new Error(await gatewayError(start, "Clip generation failed to start"));
-      const job = await start.json();
-      if (!job.id) throw new Error("Clip generation failed to start.");
-      await supabaseAdmin.from("generation_jobs").update({ output: { provider_job_id: job.id } }).eq("id", jobId as string);
+      const job = await start.json().catch(() => null);
+      const providerJobId = readProviderJobId(job);
+      if (!providerJobId) throw new Error("Clip generation failed to start: gateway returned no valid job ID.");
+      const { error: providerJobWriteError } = await supabaseAdmin
+        .from("generation_jobs")
+        .update({ output: { provider_job_id: providerJobId } })
+        .eq("id", jobId as string);
+      if (providerJobWriteError) {
+        throw new Error("Clip started, but its provider job ID could not be saved. The job was failed to avoid a stuck credit reservation.");
+      }
       return { ok: true as const, jobId: jobId as string };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Clip generation failed";
@@ -421,25 +400,74 @@ export const checkSceneClip = createServerFn({ method: "POST" })
         return fail(await gatewayError(poll, "Clip status check failed"));
       }
       const info = await poll.json().catch(() => ({}));
-      if (info.status === "failed" || info.status === "error" || info.status === "cancelled") {
-        return fail(info.error?.message ?? (typeof info.error === "string" ? info.error : "Clip generation failed."));
+      const providerStatus = normalizeProviderVideoStatus(info.status);
+      if (providerStatus === "failed") {
+        return fail(readProviderVideoError(info) ?? "Clip generation failed.");
       }
-      if (info.status !== "completed" && info.status !== "succeeded") return { status: "running" as const };
+      if (providerStatus !== "completed") return { status: "running" as const };
 
-      const url: string | undefined = info.url ?? info.video_url ?? info.video?.url ?? info.output?.url;
+      // Only one poll request may download and persist this provider result.
+      const jobDownloadRpc = supabaseAdmin as unknown as {
+        rpc: (
+          name: "claim_generation_job_download",
+          args: { _job_id: string },
+        ) => Promise<{ data: boolean | null; error: { message: string } | null }>;
+      };
+      const { data: claimed, error: claimError } = await jobDownloadRpc.rpc(
+        "claim_generation_job_download",
+        { _job_id: job.id },
+      );
+      if (claimError) throw new Error("Couldn't claim the clip download stage.");
+      if (!claimed) return { status: "running" as const };
+
+      const url = readProviderVideoUrl(info);
       const bytes = (url ? await fetchMediaBytes(url, apiKey) : null) ?? (await fetchVideoContent(providerId, apiKey));
-      const sceneId = job.input?.sceneId as string;
-      const { data: project } = await supabaseAdmin.from("projects").select("user_id").eq("id", job.project_id).maybeSingle();
-      const { data: scene } = await supabaseAdmin.from("scenes").select("title").eq("id", sceneId).maybeSingle();
-      const path = `${project!.user_id}/${job.project_id}/${crypto.randomUUID()}.mp4`;
-      const up = await supabaseAdmin.storage.from("project-assets").upload(path, bytes, { contentType: "video/mp4" });
-      if (up.error) throw new Error("Couldn't store the generated file");
-      await supabaseAdmin.from("assets").insert({
-        project_id: job.project_id, kind: "video", name: `${scene?.title ?? "Scene"} — AI video`,
-        storage_path: path, meta: { ai: true, task: "generate_clip", scene_id: sceneId },
-      });
-      await supabaseAdmin.from("scenes").update({ clip_path: path }).eq("id", sceneId);
-      await supabaseAdmin.rpc("complete_generation_job", { _job_id: job.id, _output: { path, provider_job_id: providerId } });
+      const sceneId = job.input?.sceneId as string | undefined;
+      if (!sceneId) throw new Error("Clip job is missing its scene reference.");
+
+      const { data: project, error: projectError } = await supabaseAdmin
+        .from("projects").select("id,user_id").eq("id", job.project_id).maybeSingle();
+      if (projectError || !project?.user_id) throw new Error("Project no longer exists for this clip.");
+      const { data: scene, error: sceneError } = await supabaseAdmin
+        .from("scenes").select("id,title").eq("id", sceneId).eq("project_id", job.project_id).maybeSingle();
+      if (sceneError || !scene) throw new Error("Scene no longer exists for this clip.");
+
+      const path = `${project.user_id}/${job.project_id}/${crypto.randomUUID()}.mp4`;
+      const storage = supabaseAdmin.storage.from("project-assets");
+      const up = await storage.upload(path, bytes, { contentType: "video/mp4" });
+      if (up.error) throw new Error("Couldn't store the generated clip.");
+
+      let assetId: string | undefined;
+      try {
+        const { data: asset, error: assetError } = await supabaseAdmin
+          .from("assets")
+          .insert({
+            project_id: job.project_id,
+            kind: "video",
+            name: `${scene.title || "Scene"} — AI video`,
+            storage_path: path,
+            meta: { ai: true, task: "generate_clip", scene_id: sceneId, provider_job_id: providerId },
+          })
+          .select("id")
+          .single();
+        if (assetError || !asset) throw new Error("Couldn't register the generated clip asset.");
+        assetId = asset.id;
+
+        const { error: sceneUpdateError } = await supabaseAdmin
+          .from("scenes").update({ clip_path: path }).eq("id", sceneId).eq("project_id", job.project_id);
+        if (sceneUpdateError) throw new Error("Couldn't attach the generated clip to its scene.");
+
+        const { error: completionError } = await supabaseAdmin.rpc(
+          "complete_generation_job",
+          { _job_id: job.id, _output: { path, asset_id: assetId, provider_job_id: providerId } },
+        );
+        if (completionError) throw new Error("Couldn't finalize the clip job.");
+      } catch (persistError) {
+        // Best-effort cleanup prevents orphan media when a later DB write fails.
+        if (assetId) await supabaseAdmin.from("assets").delete().eq("id", assetId);
+        await storage.remove([path]);
+        throw persistError;
+      }
       return { status: "complete" as const };
     } catch (e) {
       return fail(e instanceof Error ? e.message : "Clip generation failed");
