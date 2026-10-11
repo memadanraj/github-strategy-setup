@@ -5,8 +5,6 @@ import { generateStructured } from "./ai-gateway.server";
 
 export type TaskResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
-type RpcResult = { error: unknown | null };
-
 async function failJob(jobId: string, message: string): Promise<unknown | null> {
   try {
     const { error } = await supabaseAdmin.rpc("fail_generation_job", {
