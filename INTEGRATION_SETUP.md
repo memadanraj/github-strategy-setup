@@ -48,6 +48,7 @@ Additional hardening migrations introduced on this branch:
 - `0017_atomic_project_versions.sql` adds owner-checked transactional version snapshot/restore RPCs.
 - `0018_project_share_links.sql` adds hashed-token share records, password lockout tracking, and server-role-only table access.
 - `0019_atomic_scene_reordering.sql` adds an owner-checked transactional scene-reorder RPC.
+- `0020_atomic_scene_crud.sql` adds owner-checked transactional scene creation and deletion, with position normalization after deletion.
 
 Review and apply `0015` through `0019` in order where they have not already been applied, but only after a database backup and staging schema check. The repository has historical duplicate migration prefixes and an incomplete Drizzle journal, so do not assume numeric file order alone means a generic migration command will apply them correctly. Verify the actual database migration records first.
 
@@ -123,3 +124,8 @@ Do not log bearer tokens, provider secrets, signed media URLs, or payment data. 
 ## 9. Staging and production
 
 Keep development, staging, and production databases and credentials separate. Do not test destructive schema changes on production. Back up database metadata independently of media storage, and validate restores periodically.
+
+
+## 11. What CI does and does not prove
+
+The automated workflow runs the static checks, unit/component tests, and production build on every branch update. It uses placeholder configuration values; it does not make external provider requests or connect to the application's staging database. Current unit coverage includes Paddle signature validation, price/credit calculation, webhook delivery retry decisions, and project-share token/password helpers. These tests do not replace the staging checklist in the sections above.

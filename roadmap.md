@@ -6,7 +6,7 @@ The repository contains baseline implementations for authentication, dashboard, 
 
 - [x] Phase 0 — repository audit and baseline inventory
 - [ ] Phase 1 — foundation: auth, ownership, persistence, error recovery (partial; CI and persistence-failure tests exist; staging auth/RLS verification remains)
-- [ ] Phase 2 — projects/scenes/assets CRUD and recovery tests (transactional scene replacement/reordering, version recovery and upload validation implemented; staging integration tests remain)
+- [ ] Phase 2 — projects/scenes/assets CRUD and recovery tests (transactional scene replacement, version recovery, reordering/create/delete and upload validation implemented; SQL/RLS staging integration tests remain)
 - [ ] Phase 3 — central jobs: atomic reservation, async provider lifecycle, idempotent completion/refund (partial; staging concurrency/migration tests remain)
 - [ ] Phase 4 — provider contracts, retries, timeouts, and structured errors
 - [ ] Phase 5 — creation wizard and persisted production plan (implemented on branch; staging migration verification remains)
@@ -17,7 +17,7 @@ The repository contains baseline implementations for authentication, dashboard, 
 - [ ] Phase 10 — rendering, export integrity, and playback validation
 - [ ] Phase 11 — private/unlisted/password/expiry/revocable share links (token-hashed public export links, optional password, expiration and revocation implemented on branch; staging tests remain)
 - [ ] Phase 12 — credit ledger concurrency, refunds, reconciliation
-- [ ] Phase 13 — Paddle checkout and webhook lifecycle in sandbox
+- [ ] Phase 13 — Paddle checkout and webhook lifecycle in sandbox (signature, price mapping and delivery retry unit tests added; sandbox checkout/subscription/refund verification remains)
 - [ ] Phase 14 — admin authorization and audit trails
 - [ ] Phase 15 — monitoring, logs, deployment and recovery runbooks
 - [ ] Phase 16 — research/templates/brand kits/AI Director/advanced editor
