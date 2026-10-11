@@ -414,7 +414,13 @@ export const generateSceneClip = createServerFn({ method: "POST" })
       if (!start.ok) throw new Error(await gatewayError(start, "Clip generation failed to start"));
       const job = await start.json();
       if (!job.id) throw new Error("Clip generation failed to start.");
-      await supabaseAdmin.from("generation_jobs").update({ output: { provider_job_id: job.id } }).eq("id", jobId as string);
+      const { error: providerJobWriteError } = await supabaseAdmin
+        .from("generation_jobs")
+        .update({ output: { provider_job_id: job.id } })
+        .eq("id", jobId as string);
+      if (providerJobWriteError) {
+        throw new Error("Clip started, but its provider job ID could not be saved. The job was failed to avoid a stuck credit reservation.");
+      }
       return { ok: true as const, jobId: jobId as string };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Clip generation failed";
