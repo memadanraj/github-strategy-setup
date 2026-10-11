@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { statusLabel } from "@/lib/studio";
+import { createProjectVersion, restoreProjectVersion } from "@/lib/project-versions";
 import type { Tables } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/_studio/projects/$projectId")({
@@ -307,30 +308,37 @@ function Versions({ project }: { project: Tables<"projects"> }) {
   const [label, setLabel] = useState("");
 
   async function snapshot() {
-    const { data: scenes, error: se } = await supabase.from("scenes").select("title,narration,visual_prompt,duration_seconds,position").eq("project_id", project.id).order("position");
-    if (se) { toast.error(se.message); return; }
-    const next = (versions[0]?.version_number ?? 0) + 1;
-    const { error } = await supabase.from("project_versions").insert({
-      project_id: project.id, version_number: next, label: label.trim() || null,
-      snapshot: { title: project.title, idea: project.idea, scenes: scenes ?? [] },
-    });
-    if (error) { toast.error(error.message); return; }
-    setLabel("");
-    toast.success(`Saved version ${next}`);
-    qc.invalidateQueries({ queryKey: ["versions", project.id] });
+    try {
+      const result = await createProjectVersion(
+        (args) => supabase.rpc("create_project_version", args),
+        project.id,
+        label,
+      );
+      setLabel("");
+      toast.success(`Saved version ${result.versionNumber}`);
+      await qc.invalidateQueries({ queryKey: ["versions", project.id] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't save project version.");
+    }
   }
 
   async function restore(v: Tables<"project_versions">) {
-    if (!confirm(`Restore version ${v.version_number}? Current scenes will be replaced.`)) return;
-    const snap = v.snapshot as { scenes?: Array<{ title: string; narration: string | null; visual_prompt: string | null; duration_seconds: number; position: number }> };
-    const del = await supabase.from("scenes").delete().eq("project_id", project.id);
-    if (del.error) { toast.error(del.error.message); return; }
-    if (snap.scenes?.length) {
-      const { error } = await supabase.from("scenes").insert(snap.scenes.map((s) => ({ ...s, project_id: project.id })));
-      if (error) { toast.error(error.message); return; }
+    if (!confirm(`Restore version ${v.version_number}? Project details and scenes in this version will be restored.`)) return;
+    try {
+      await restoreProjectVersion(
+        (args) => supabase.rpc("restore_project_version", args),
+        project.id,
+        v.id,
+      );
+      toast.success(`Restored version ${v.version_number}`);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["project", project.id] }),
+        qc.invalidateQueries({ queryKey: ["scenes", project.id] }),
+        qc.invalidateQueries({ queryKey: ["versions", project.id] }),
+      ]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't restore project version. Your current data was preserved.");
     }
-    toast.success(`Restored version ${v.version_number}`);
-    qc.invalidateQueries({ queryKey: ["scenes", project.id] });
   }
 
   return (

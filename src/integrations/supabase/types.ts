@@ -1491,6 +1491,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_project_version: {
+        Args: { _label?: string | null; _project_id: string }
+        Returns: Json
+      }
+      restore_project_version: {
+        Args: { _project_id: string; _version_id: string }
+        Returns: undefined
+      }
       complete_generation_job: {
         Args: { _job_id: string; _output: Json }
         Returns: undefined
