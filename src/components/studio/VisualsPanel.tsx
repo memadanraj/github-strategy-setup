@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ImageIcon, Film, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { generateSceneImage, generateSceneClip } from "@/lib/visuals.functions";
+import { generateSceneImage, generateSceneClip, checkSceneClip } from "@/lib/visuals.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Tables } from "@/integrations/supabase/types";
@@ -144,7 +144,7 @@ function SceneVisual({ scene, index, project, costs }: { scene: Tables<"scenes">
       <div className={`${aspect} overflow-hidden rounded-lg bg-surface-raised`}>
         {clip.data ? <video src={clip.data} controls className="size-full object-cover" />
           : img.data ? <img src={img.data} alt={scene.title} className="size-full object-cover" />
-          : <div className="flex size-full items-center justify-center text-xs text-muted-foreground">{busy ? "Generating…" : "No visual yet"}</div>}
+          : <div className="flex size-full items-center justify-center text-xs text-muted-foreground">{busy || clipRunning ? "Generating…" : "No visual yet"}</div>}
       </div>
       <p className="mt-2 text-sm font-semibold"><span className="font-mono text-xs text-signal">{String(index + 1).padStart(2, "0")}</span> {scene.title}</p>
       <p className="line-clamp-2 text-xs text-muted-foreground">{scene.visual_prompt || "No visual description — add one in Scenes."}</p>
@@ -152,8 +152,8 @@ function SceneVisual({ scene, index, project, costs }: { scene: Tables<"scenes">
         <Button size="sm" variant="panel" disabled={!!busy || !scene.visual_prompt} onClick={() => run("image")}>
           {busy === "image" ? <Loader2 className="animate-spin" /> : <ImageIcon />} Image · {costs?.["generate_image"] ?? "…"} cr
         </Button>
-        <Button size="sm" variant="panel" disabled={!!busy || !scene.visual_prompt} onClick={() => run("clip")}>
-          {busy === "clip" ? <Loader2 className="animate-spin" /> : <Film />} Clip · {costs?.["generate_clip"] ?? "…"} cr
+        <Button size="sm" variant="panel" disabled={!!busy || clipRunning || !scene.visual_prompt} onClick={() => run("clip")}>
+          {busy === "clip" || clipRunning ? <Loader2 className="animate-spin" /> : <Film />} Clip · {costs?.["generate_clip"] ?? "…"} cr
         </Button>
       </div>
     </div>
