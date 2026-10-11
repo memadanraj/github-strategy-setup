@@ -36,7 +36,11 @@ export const createRenderJob=createServerFn({method:"POST"}).middleware([require
   if(r.error||!r.data)throw r.error||new Error("Couldn't create render job");
   const jobId=r.data.id;
   const provider=getRenderProvider();
-  if(!provider)return{ok:true,jobId,dispatched:false,message:"Render queued. Configure RENDERER_URL to dispatch cloud rendering."};
+  if(!provider){
+   const error="RENDER_PROVIDER_NOT_CONFIGURED: Configure SHOTSTACK_API_KEY or RENDERER_URL before starting a render.";
+   await admin.from("render_jobs").update({status:"failed",error,finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",jobId);
+   return {ok:false,error:"Rendering is not configured yet. Set SHOTSTACK_API_KEY or RENDERER_URL and try again."};
+  }
   try{const submitted=await provider.submit(manifest);await admin.from("render_jobs").update({status:"processing",provider_job_id:submitted.providerJobId,started_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",jobId);return{ok:true,jobId,dispatched:true,message:"Render dispatched."}}
   catch(e:any){await admin.from("render_jobs").update({status:"failed",error:e.message,finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",jobId);return{ok:false,error:e.message}}
  }catch(e:any){return{ok:false,error:e.message||"Couldn't create render job."}}
