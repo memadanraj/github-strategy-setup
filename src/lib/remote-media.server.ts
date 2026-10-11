@@ -28,7 +28,9 @@ function isBlockedIpv4(hostname: string): boolean {
   if (parts.length !== 4 || !parts.every((part) => /^\d{1,3}$/.test(part))) return false;
   const octets = parts.map(Number);
   if (octets.some((part) => part < 0 || part > 255)) return true;
-  const [a, b, c] = octets;
+  const a = octets[0] ?? -1;
+  const b = octets[1] ?? -1;
+  const c = octets[2] ?? -1;
   return (
     a === 0 ||
     a === 10 ||
