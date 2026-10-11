@@ -20,17 +20,17 @@ export function normalizeSceneBreakdown(value: unknown): NormalizedScene[] {
     }
 
     const scene = item as Record<string, unknown>;
-    const narration = typeof scene.narration === "string" ? scene.narration.trim() : "";
-    const visualPrompt = typeof scene.visual_prompt === "string" ? scene.visual_prompt.trim() : "";
-    const rawDuration = typeof scene.duration_seconds === "number" || typeof scene.duration_seconds === "string"
-      ? Number(scene.duration_seconds)
+    const narration = typeof scene["narration"] === "string" ? scene["narration"].trim() : "";
+    const visualPrompt = typeof scene["visual_prompt"] === "string" ? scene["visual_prompt"].trim() : "";
+    const rawDuration = typeof scene["duration_seconds"] === "number" || typeof scene["duration_seconds"] === "string"
+      ? Number(scene["duration_seconds"])
       : Number.NaN;
 
     if (!narration || !visualPrompt || !Number.isFinite(rawDuration)) {
       throw new Error(`AI returned incomplete scene ${index + 1}. Existing scenes were preserved.`);
     }
 
-    const title = typeof scene.title === "string" ? scene.title.trim().slice(0, 120) : "";
+    const title = typeof scene["title"] === "string" ? scene["title"].trim().slice(0, 120) : "";
     return {
       title: title || `Scene ${index + 1}`,
       narration,
