@@ -464,7 +464,13 @@ export const checkSceneClip = createServerFn({ method: "POST" })
       if (info.status !== "completed" && info.status !== "succeeded") return { status: "running" as const };
 
       // Only one poll request may download and persist this provider result.
-      const { data: claimed, error: claimError } = await supabaseAdmin.rpc(
+      const jobDownloadRpc = supabaseAdmin as unknown as {
+        rpc: (
+          name: "claim_generation_job_download",
+          args: { _job_id: string },
+        ) => Promise<{ data: boolean | null; error: { message: string } | null }>;
+      };
+      const { data: claimed, error: claimError } = await jobDownloadRpc.rpc(
         "claim_generation_job_download",
         { _job_id: job.id },
       );
