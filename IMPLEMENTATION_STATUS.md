@@ -11,7 +11,7 @@ This is an evidence-based phase tracker for the master plan. A UI control or sou
 | 0. Repository audit | PARTIAL | Stack, routes, database/auth, provider keys, tests, and migration inconsistencies inspected. Continue auditing during each implementation step. |
 | 1. Foundation (auth, ownership, persistence, errors) | TEST | Existing Supabase auth/RLS; env secrets removed from branch tip. Add automated cross-user access tests and verify signup/login/reset and persistence against staging. |
 | 2. Projects and scenes | PARTIAL / TEST | Project/scene APIs and tables exist. Scene breakdown now validates AI output and uses migration `0015_atomic_scene_replacement.sql` to replace scenes in one transaction, preserving prior scenes on failure. Automated CRUD/order/delete/recovery tests and staging migration application remain. |
-| 3. Central jobs | PARTIAL / TEST | Existing `generation_jobs`; migration `0013_job_pipeline_hardening.sql` adds events, active-clip dedupe, atomic download claim, and idempotent terminal state/refund. Async clip start now checks provider-job-ID persistence, and provider response parsing is normalized with unit tests. Staging migration application, SQL/concurrency tests, and live provider tests are still required. |
+| 3. Central jobs | PARTIAL / TEST | Migration `0013_job_pipeline_hardening.sql` adds events, active-clip dedupe, atomic download claim, and idempotent terminal state/refund. Async clip start validates provider-job-ID persistence; AI job completion retries once and failures no longer claim a refund unless the refund RPC succeeds. Unit tests cover settlement retry and refund-RPC failure. Staging migration application and concurrency tests remain. |
 | 4. Provider abstraction | PARTIAL | Render/audio adapters exist. Text/image/video still call gateway from domain functions; define common provider response schemas and add adapter contract tests. |
 | 5. Script generation | EXISTING / TEST | Research/hooks/script/scene drafting flows exist. Mainline operations still execute synchronously and structured generation/persistence needs failure tests. |
 | 6. Video clip generation | PARTIAL / TEST | Client-polled provider job exists; downloader bounds bytes/time, checks HTTPS/redirects and avoids forwarding gateway secrets to third-party hosts. Provider job IDs/status/output URLs are normalized and malformed responses have unit coverage. Need staging provider success/failure/timeout/retry/cancel tests and apply migration 0013 first. |
@@ -89,7 +89,7 @@ This checklist follows the uploaded plan's order. “Exists” means code is pre
 
 ### Current-head evidence
 
-- GitHub Actions for commit `93c5a3e` passed lint, TypeScript typecheck, unit/component tests, and production build.
+- GitHub Actions for commit `c6b7fe6` passed lint, TypeScript typecheck, unit/component tests, and production build (12 test files passed).
 - New-project and writing-panel failure-path tests pass in CI; scene-breakdown normalization tests pass in CI. The SQL migration itself still requires application and integration verification against a staging Supabase database.
 - No staging Supabase database, live AI provider, render service, or Paddle sandbox has been exercised from this environment.
 
@@ -99,3 +99,5 @@ This checklist follows the uploaded plan's order. “Exists” means code is pre
 - Script-to-scenes now validates the generated scene list before mutation and calls a transactional SQL function, preventing the previous delete-then-insert flow from leaving a project with zero scenes when insertion fails.
 
 - The creation wizard stores a versioned production brief and an eight-stage plan in `projects.settings`. Script, research, hook/title, and scene prompts now receive those settings; script word targets are derived from the selected duration.
+
+- AI task startup now fails early when the task configuration is missing. Completion settlement is retried once because the database operation is intended to be idempotent; refund failure is surfaced as a reconciliation requirement instead of falsely telling the user their credits were returned.
