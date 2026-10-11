@@ -89,7 +89,7 @@ This checklist follows the uploaded plan's order. “Exists” means code is pre
 
 ### Current-head evidence
 
-- GitHub Actions for commit `69e8553` passed lint, TypeScript typecheck, unit/component tests, and production build (17 test files passed).
+- GitHub Actions for commit `1097f0e682c580e4fd9f08fac2006923fc902c53` passed lint, TypeScript typecheck, unit/component tests, and production build (18 test files passed).
 - New-project and writing-panel failure-path tests pass in CI; scene-breakdown normalization tests pass in CI. The SQL migration itself still requires application and integration verification against a staging Supabase database.
 - No staging Supabase database, live AI provider, render service, or Paddle sandbox has been exercised from this environment.
 
@@ -110,3 +110,8 @@ This checklist follows the uploaded plan's order. “Exists” means code is pre
 
 - Scene creation and deletion now use transactional RPCs in migration `0020_atomic_scene_crud.sql`. The database locks the owning project, assigns a server-side position, rejects cross-project IDs, and compacts positions after deletion. The UI reports failures instead of silently refreshing.
 - Added five Paddle webhook delivery tests: invalid signatures, malformed event payloads, duplicate processed events, active processing leases, and replay of a failed event. Signature and price-validation tests remain separate; real Paddle sandbox behavior and database event-lock races have not been exercised here.
+
+
+## Credit ledger test coverage
+
+Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use the idempotent `apply_credit_transaction` RPC, invalid amounts and idempotency keys are rejected before database calls, and an RPC failure is returned as an error rather than reported as a successful grant. The SQL procedure and concurrent duplicate-event behavior still require database integration testing.

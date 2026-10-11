@@ -50,9 +50,13 @@ Additional hardening migrations introduced on this branch:
 - `0019_atomic_scene_reordering.sql` adds an owner-checked transactional scene-reorder RPC.
 - `0020_atomic_scene_crud.sql` adds owner-checked transactional scene creation and deletion, with position normalization after deletion.
 
-Review and apply `0015` through `0019` in order where they have not already been applied, but only after a database backup and staging schema check. The repository has historical duplicate migration prefixes and an incomplete Drizzle journal, so do not assume numeric file order alone means a generic migration command will apply them correctly. Verify the actual database migration records first.
+Review and apply `0015` through `0020` in dependency order where they have not already been applied, but only after a database backup and staging schema check. The repository has historical duplicate migration prefixes and an incomplete Drizzle journal, so do not assume numeric file order alone means a generic migration command will apply them correctly. Verify the actual database migration records first.
 
 
+
+### Legacy Stripe SQL files
+
+The app's active billing implementation in this branch is Paddle. The repository still contains historical `0011_billing.sql` with Stripe tables/columns while another file shares the `0011_*` prefix and establishes Paddle RLS policies. **Do not run the legacy Stripe migration blindly on a Paddle installation and do not delete/edit historical migrations to hide the conflict.** Inspect the database's applied-migration ledger and existing tables first. For a fresh database, use a reviewed, ordered migration plan based on the intended Paddle schema; for an existing database, apply only audited missing migrations in staging.
 
 ## 3. AI Gateway
 
