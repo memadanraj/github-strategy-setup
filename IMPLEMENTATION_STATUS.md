@@ -47,3 +47,48 @@ Do not claim production readiness until a staging user can sign up, create a pro
 - Added a pure provider-response contract for video job IDs, status, output URL variants, and error messages, with unit tests for valid, malformed, missing, and alternate response shapes.
 - Async clip creation now checks the database write for the external provider job ID. If persistence fails, the existing failure/refund path runs instead of returning a job that can only spin until timeout.
 - These code changes are committed to the working branch. They are not considered verified until the workflow for the latest head passes; staging database/provider behavior remains unverified.
+
+
+## Master plan — exact implementation order and gates
+
+This checklist follows the uploaded plan's order. “Exists” means code is present, not that the stage is production-complete. Do not check a stage off until its functional and failure-path tests pass.
+
+| # | Workstream | Status | Exit gate |
+|---:|---|---|---|
+| 1 | Repository audit | PARTIAL | Finish route, dependency, secrets/history, build and test inventory. |
+| 2 | Database audit | PARTIAL | Apply migrations to staging; verify ordering, constraints, RLS, grants, and rollback/recovery. |
+| 3 | API/server-function audit | PARTIAL | Enumerate every mutation and verify auth, ownership, validation, error shape, and idempotency. |
+| 4 | Authentication | TEST | Automated signup/login/reset and expired/invalid token checks; staging verification required. |
+| 5 | Authorization / ownership | TEST | Cross-user project, scene, asset, job, export, admin, and billing denial tests. |
+| 6 | Project model | EXISTING / TEST | Create/update/delete, settings persistence, recovery, and RLS integration tests. |
+| 7 | Scene model | EXISTING / TEST | Create/reorder/update/delete, stable ordering, and persisted timeline/scene state tests. |
+| 8 | Asset model | PARTIAL / TEST | Upload, metadata, signed URLs, delete cleanup, and cross-project rejection tests. |
+| 9 | Central job system | PARTIAL / TEST | Atomic reservation, dedupe, claims, terminal-state idempotency, retry, and refunds under concurrency. |
+| 10 | Error handling | PARTIAL | Standardize safe user errors, structured server logs, correlation IDs, and provider failure classification. |
+| 11 | Provider abstraction | PARTIAL | Contract tests for text/image/video/audio/render adapters, timeouts, retries, and malformed responses. |
+| 12 | Script generation | EXISTING / TEST | Structured output validation, save-before-next-step, retries, and credit settlement tests. |
+| 13 | Video generation | PARTIAL / TEST | Start/poll/timeout/failure/cancel/retry against a staging provider; no long synchronous request. |
+| 14 | Result download | PARTIAL / TEST | URL/redirect/content-type/size/time bounds, transient errors, and invalid-output recovery. |
+| 15 | Asset persistence | PARTIAL / TEST | Upload + asset row + scene linkage consistency and orphan cleanup tests. |
+| 16 | Voice generation | EXISTING / TEST | Provider success/failure, preview, cloning consent, timeout, and credit refund tests. |
+| 17 | Captions | EXISTING / TEST | Timing bounds, editing persistence, transcript failure, and render/export format tests. |
+| 18 | Timeline | EXISTING / TEST | Drag/trim/split/order, undo/redo, reload persistence, and invalid duration tests. |
+| 19 | Rendering | PARTIAL / TEST | Queue, provider status, timeout/retry/cancel, valid output, and job/asset consistency tests. |
+| 20 | Export | PARTIAL / TEST | Export integrity, signed download expiry, missing file, MIME type, and playback tests. |
+| 21 | Share links | MISSING | Implement private/unlisted/password/expiry/revocation semantics and access tests. |
+| 22 | Credits | EXISTING / TEST | Race-safe ledger, duplicate events, actual-cost reconciliation, refunds, and audit history. |
+| 23 | Billing | PARTIAL / TEST | Paddle sandbox checkout, subscription lifecycle, duplicate/out-of-order webhooks, and refunds. |
+| 24 | Admin | EXISTING / TEST | Role denial, audited credit adjustments, job inspection, and sensitive-action tests. |
+| 25 | Monitoring | PARTIAL | Correlation IDs, safe structured logs, provider latency/failure metrics, and actionable alerts. |
+| 26 | Research | PARTIAL | Validate source-backed claims, persist research, and distinguish generated suggestions from verified facts. |
+| 27 | Templates | PARTIAL | Template CRUD, versioning, validation, and project instantiation tests. |
+| 28 | Brand kits | MISSING / FUTURE | Persist brand assets/tokens and apply them consistently to generation/rendering. |
+| 29 | AI Director | MISSING / FUTURE | Proposed change plan, user preview/approval, safe apply, version snapshot, and undo. |
+| 30 | Advanced editor | FUTURE | Only after basic editor/render/export acceptance tests are stable. |
+| 31 | Scaling and release | FUTURE | Load/concurrency tests, deployment runbook, backups/restore, and full end-to-end MVP sign-off. |
+
+### Current-head evidence
+
+- GitHub Actions for commit `5c7237b` passed lint, TypeScript typecheck, unit/component tests, and production build.
+- The current project-creation test commit is being validated separately; do not use the prior green result as evidence for later commits.
+- No staging Supabase database, live AI provider, render service, or Paddle sandbox has been exercised from this environment.
