@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { CreditCard, Loader2, Sparkles, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cancelPaddleSubscription, changePaddleSubscriptionPlan, getPaddleBillingStatus, getPaddleClientConfig } from "@/lib/paddle.functions";
+import { cancelPaddleSubscription, changePaddleSubscriptionPlan, getPaddleBillingStatus, getPaddleClientConfig, preparePaddleCheckout } from "@/lib/paddle.functions";
 
 declare global {
   interface Window { Paddle?: any; }
@@ -28,7 +28,7 @@ function loadPaddleJs(): Promise<void> {
 export function BillingPanel({ currentPlan, credits, userId }: { currentPlan: string; credits: number; userId: string }) {
   const status = useServerFn(getPaddleBillingStatus);
   const clientConfig = useServerFn(getPaddleClientConfig);
-  const changePlan = useServerFn(changePaddleSubscriptionPlan);
+  const changePlan = useServerFn(changePaddleSubscriptionPlan);\n  const prepareCheckout = useServerFn(preparePaddleCheckout);
   const cancelSub = useServerFn(cancelPaddleSubscription);
   const [busy, setBusy] = useState<string | null>(null);
   const paddleReady = useRef(false);
@@ -43,11 +43,14 @@ export function BillingPanel({ currentPlan, credits, userId }: { currentPlan: st
     paddleReady.current = true;
   }
 
-  async function openCheckout(priceId: string, customData: Record<string, string>) {
+  async function openCheckout(kind: "subscription" | "credit_pack", slug: string) {
+    // Price and account ownership come from the authenticated server, not from
+    // mutable browser custom_data or a client-supplied price identifier.
+    const intent = await prepareCheckout({ data: { kind, slug } });
     await ensurePaddle();
     window.Paddle.Checkout.open({
-      items: [{ priceId, quantity: 1 }],
-      customData,
+      items: [{ priceId: intent.priceId, quantity: 1 }],
+      customData: { checkout_intent: intent.intentId },
       settings: { displayMode: "overlay", theme: "dark" },
     });
   }
@@ -61,7 +64,7 @@ export function BillingPanel({ currentPlan, credits, userId }: { currentPlan: st
         toast.success("Subscription plan updated");
         await refetch();
       } else {
-        await openCheckout(plan.paddle_price_id, { user_id: userId, type: "subscription", plan_slug: plan.slug });
+        await openCheckout("subscription", plan.slug);
       }
     } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
   }
@@ -69,7 +72,7 @@ export function BillingPanel({ currentPlan, credits, userId }: { currentPlan: st
   async function buy(pack: any) {
     setBusy(pack.slug);
     try {
-      await openCheckout(pack.paddle_price_id, { user_id: userId, type: "credit_pack", pack_slug: pack.slug, credits: String(pack.credits) });
+      await openCheckout("credit_pack", pack.slug);
     } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
   }
 
