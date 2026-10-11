@@ -18,8 +18,8 @@
 
 # Master Fix & Improve Plan (uploaded DCXORA plan)
 - [x] Phase 0 Repository audit — CURRENT_STATE.md
-- [ ] Phase 1 Foundation verification + tests
-- [ ] Phase 3 Central jobs — async clip generation
+- [x] Phase 1 Foundation verification + tests
+- [x] Phase 3 Central jobs — async clip generation
 - [ ] Creation wizard + production plan
 - [ ] Share links
 - [ ] Update outdated Stripe docs
