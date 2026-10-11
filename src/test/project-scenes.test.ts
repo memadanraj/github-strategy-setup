@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { canMoveScene, moveProjectScene } from "@/lib/project-scenes";
+import { canMoveScene, createProjectScene, deleteProjectScene, moveProjectScene } from "@/lib/project-scenes";
 
 describe("scene reorder contract", () => {
   it("allows a move only when the target index is within bounds", () => {
