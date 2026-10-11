@@ -23,6 +23,29 @@ const DEFAULT_TIMEOUT_MS = 45_000;
 const DEFAULT_MAX_BYTES = 128 * 1024 * 1024;
 const DEFAULT_MAX_REDIRECTS = 3;
 
+/**
+ * Return safe header variants for a provider URL. Credentials are only offered
+ * to the explicitly trusted origin; arbitrary provider/CDN URLs receive none.
+ */
+export function remoteMediaHeaderVariants(
+  rawUrl: string,
+  trustedOrigin: string,
+  credentialHeaders: HeadersInit,
+): HeadersInit[] {
+  let url: URL;
+  let trusted: URL;
+  try {
+    url = new URL(rawUrl);
+    trusted = new URL(trustedOrigin);
+  } catch {
+    return [];
+  }
+  if (url.origin !== trusted.origin || url.protocol !== "https:") {
+    return [{}];
+  }
+  return [{}, new Headers(credentialHeaders)];
+}
+
 function isBlockedIpv4(hostname: string): boolean {
   const parts = hostname.split(".");
   if (parts.length !== 4 || !parts.every((part) => /^\d{1,3}$/.test(part))) return false;
