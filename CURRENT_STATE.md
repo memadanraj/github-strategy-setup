@@ -57,3 +57,23 @@ Missing: ELEVENLABS_API_KEY, SHOTSTACK_API_KEY, GOOGLE_CLIENT_ID/SECRET, YOUTUBE
 1. Phase 1 foundation checks (auth, ownership, persistence) with tests.
 2. Phase 3 central jobs: move clip generation to async create/poll.
 3. Wizard (video type, duration, tone, audience, language) → production plan.
+
+## Update — Phase hardening branch (Oct 11, 2026)
+
+These are branch changes only; they have not been merged to `main`.
+
+- Removed the tracked root `.env` file on the hardening branch and added local env-file ignore rules. This does not purge Git history; rotate any real values that were committed.
+- Replaced the old starter README and Stripe-oriented setup guide with DCXORA setup guidance matching the current Paddle integration.
+- Added GitHub Actions checks for locked Bun install, lint, TypeScript typecheck, Vitest, and production build. The first lint run showed approximately 2,700 inherited findings (mostly formatting and explicit `any`); these are now warnings so functional linting can expose non-formatting issues while debt is addressed incrementally.
+- Added a bounded HTTPS media downloader with redirect validation, private/reserved address checks, size/timeout/content-type enforcement, and tests for unsafe URLs and download failures. DNS-resolved private-address blocking still depends on hosting/runtime network policy; URLs should be restricted to expected provider hosts where feasible.
+- AI media downloads no longer send Lovable Gateway credentials to arbitrary provider/CDN URLs. Credentials are sent only to the gateway origin.
+- Added duplicate-active clip handling, one-time download claiming, asset/scene/job relationship checks, and cleanup for failed clip persistence in application code.
+- Added `0013_job_pipeline_hardening.sql` for generation-job event history, duplicate active clip protection, download claiming, and idempotent terminal transitions. It is not yet confirmed applied to any database; follow the staging migration steps in `INTEGRATION_SETUP.md`.
+- Render requests now fail explicitly when no render provider is configured instead of leaving a queued job polling indefinitely. Completed exports use bounded media download and checked asset/export writes.
+- Added render-provider manifest/status tests and remote-media security tests; CI must finish on the latest branch head before these can be called passing.
+
+### Still not verified / not production-ready
+
+- Live sign-up/login/password reset, cross-user ownership denials, database persistence, credit reservation/refund under concurrency, live video/voice generation, captions/timeline behavior, real rendering/playback, Paddle sandbox webhooks/renewals/cancellation, and YouTube OAuth/publishing.
+- The repository migration history is inconsistent: duplicate numeric prefixes exist, several SQL files are missing from `drizzle/migrations/meta/_journal.json`, and the Drizzle schema/snapshots are blank. Do not apply migrations blindly to production.
+- The project-wide lint backlog, extensive untyped database/provider payloads, distributed rate limiting, public/private share links, AI Director, and several advanced features remain open.
