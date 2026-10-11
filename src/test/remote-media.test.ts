@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { downloadRemoteMedia, validateRemoteMediaUrl } from "@/lib/remote-media.server";
+import { downloadRemoteMedia, remoteMediaHeaderVariants, validateRemoteMediaUrl } from "@/lib/remote-media.server";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -30,6 +30,16 @@ describe("validateRemoteMediaUrl", () => {
 
   it("rejects malformed URLs with a stable error", () => {
     expect(() => validateRemoteMediaUrl("not a url")).toThrow("Provider returned an invalid media URL.");
+  });
+});
+
+describe("remoteMediaHeaderVariants", () => {
+  it("offers credential headers only for the exact trusted HTTPS origin", () => {
+    const credentials = { Authorization: "Bearer secret", "Lovable-API-Key": "secret" };
+    expect(remoteMediaHeaderVariants("https://ai.gateway.lovable.dev/v1/videos/abc/content", "https://ai.gateway.lovable.dev/v1", credentials)).toHaveLength(2);
+    expect(remoteMediaHeaderVariants("https://cdn.example.net/out.mp4", "https://ai.gateway.lovable.dev/v1", credentials)).toEqual([{}]);
+    expect(remoteMediaHeaderVariants("http://ai.gateway.lovable.dev/v1/videos/abc", "https://ai.gateway.lovable.dev/v1", credentials)).toEqual([{}]);
+    expect(remoteMediaHeaderVariants("not a url", "https://ai.gateway.lovable.dev/v1", credentials)).toEqual([]);
   });
 });
 
