@@ -4,6 +4,17 @@
 alter table public.credit_transactions
   add column if not exists idempotency_key text;
 
+-- Recoverable webhook processing: rows exist before fulfillment starts, and failed
+-- events remain auditable and can be claimed again when Paddle retries delivery.
+alter table public.paddle_events
+  add column if not exists processing_status text not null default 'processed';
+alter table public.paddle_events
+  add column if not exists processing_started_at timestamptz;
+alter table public.paddle_events
+  add column if not exists last_error text;
+create index if not exists paddle_events_processing_idx
+  on public.paddle_events(processing_status, processing_started_at);
+
 create unique index if not exists credit_transactions_idempotency_key_uq
   on public.credit_transactions(idempotency_key)
   where idempotency_key is not null;
