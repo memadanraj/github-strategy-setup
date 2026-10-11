@@ -10,7 +10,7 @@ This is an evidence-based phase tracker for the master plan. A UI control or sou
 |---|---|---|
 | 0. Repository audit | PARTIAL | Stack, routes, database/auth, provider keys, tests, and migration inconsistencies inspected. Continue auditing during each implementation step. |
 | 1. Foundation (auth, ownership, persistence, errors) | TEST | Existing Supabase auth/RLS; env secrets removed from branch tip. Add automated cross-user access tests and verify signup/login/reset and persistence against staging. |
-| 2. Projects and scenes | PARTIAL / TEST | Project/scene APIs and tables exist. Scene breakdown now validates AI output and uses migration `0015_atomic_scene_replacement.sql` to replace scenes in one transaction, preserving prior scenes on failure. Automated CRUD/order/delete/recovery tests and staging migration application remain. |
+| 2. Projects and scenes | PARTIAL / TEST | Scene breakdown validates AI output and uses migration `0015_atomic_scene_replacement.sql` for transactional replacement. Version saves/restores are transactional via `0017_atomic_project_versions.sql`; scene moves now use a single owner-checked transaction via `0019_atomic_scene_reordering.sql`. CRUD/restore SQL integration tests and staging migration application remain. |
 | 3. Central jobs | PARTIAL / TEST | Migration `0013_job_pipeline_hardening.sql` adds events, active-clip dedupe, atomic download claim, and idempotent terminal state/refund. Async clip start validates provider-job-ID persistence; AI job completion retries once and failures no longer claim a refund unless the refund RPC succeeds. Unit tests cover settlement retry and refund-RPC failure. Staging migration application and concurrency tests remain. |
 | 4. Provider abstraction | PARTIAL | Render/audio adapters exist. Text/image/video still call gateway from domain functions; define common provider response schemas and add adapter contract tests. |
 | 5. Script generation | EXISTING / TEST | Research/hooks/script/scene drafting flows exist. Mainline operations still execute synchronously and structured generation/persistence needs failure tests. |
@@ -19,7 +19,7 @@ This is an evidence-based phase tracker for the master plan. A UI control or sou
 | 8. Captions | EXISTING / TEST | Caption/transcription model exists; timing, edit, export-format and rendered-caption acceptance tests remain. |
 | 9. Basic editor/timeline | EXISTING / TEST | Timeline tracks/clips, audio/text/caption data and UI exist. Drag/trim/split/undo/redo and persistence tests remain. |
 | 10. Rendering | PARTIAL | Shotstack and compatible HTTP renderer adapters exist. Clear missing-provider failure and bounded MP4 result download added. Render-provider tests added; end-to-end render/playback and idempotent retry tests remain. |
-| 11. Export and sharing | PARTIAL | Export listing and signed download URL exist. Public/private/unlisted/password/expiry links are missing or unverified. |
+| 11. Export and sharing | PARTIAL / TEST | Added share tokens stored only as SHA-256 hashes, optional scrypt password protection, 1/7/30-day or no-expiry links, revocation, temporary signed MP4 playback, and password lockout. Migration `0018_project_share_links.sql`; unit tests cover token/password primitives, while route/provider/storage integration and staging migration tests remain. |
 | 12. Credits | EXISTING / TEST | SQL reserve/complete/fail/refund ledger exists. Concurrency, idempotency, reconciliation, actual-cost reporting, and billing/job integration tests remain. |
 | 13. Billing | PARTIAL | Paddle client, webhook signature/event handling and tables exist. Price IDs and sandbox lifecycle tests remain; legacy Stripe SQL files/migration order need careful reconciliation. |
 | 14. Admin | EXISTING / TEST | Admin users/plans/credits/jobs UI/server code exists. Role-denial and audit-trail tests remain. |
@@ -61,7 +61,7 @@ This checklist follows the uploaded plan's order. “Exists” means code is pre
 | 4 | Authentication | TEST | Automated signup/login/reset and expired/invalid token checks; staging verification required. |
 | 5 | Authorization / ownership | TEST | Cross-user project, scene, asset, job, export, admin, and billing denial tests. |
 | 6 | Project model | EXISTING / TEST | Create/update/delete, settings persistence, recovery, and RLS integration tests. |
-| 7 | Scene model | EXISTING / TEST | Create/reorder/update/delete, stable ordering, and persisted timeline/scene state tests. |
+| 7 | Scene model | PARTIAL / TEST | Added normalization helper and transactional RPC for scene replacement (`0015`) and reordering (`0019`); UI now surfaces reorder errors and refreshes scene editors when persisted rows change. CRUD, RLS, RPC, and restore behavior still need staging integration tests. |
 | 8 | Asset model | PARTIAL / TEST | Upload, metadata, signed URLs, delete cleanup, and cross-project rejection tests. |
 | 9 | Central job system | PARTIAL / TEST | Atomic reservation, dedupe, claims, terminal-state idempotency, retry, and refunds under concurrency. |
 | 10 | Error handling | PARTIAL | Standardize safe user errors, structured server logs, correlation IDs, and provider failure classification. |
@@ -75,7 +75,7 @@ This checklist follows the uploaded plan's order. “Exists” means code is pre
 | 18 | Timeline | EXISTING / TEST | Drag/trim/split/order, undo/redo, reload persistence, and invalid duration tests. |
 | 19 | Rendering | PARTIAL / TEST | Queue, provider status, timeout/retry/cancel, valid output, and job/asset consistency tests. |
 | 20 | Export | PARTIAL / TEST | Export integrity, signed download expiry, missing file, MIME type, and playback tests. |
-| 21 | Share links | MISSING | Implement private/unlisted/password/expiry/revocation semantics and access tests. |
+| 21 | Share links | PARTIAL / TEST | Owner-only creation/list/revoke for ready exports; hashed random tokens; optional password hashes; expiry; failed-password lockout; public playback of only the selected export. Token/password unit tests pass. Staging RLS, expiry, revocation, and signed-URL behavior remains unverified. |
 | 22 | Credits | EXISTING / TEST | Race-safe ledger, duplicate events, actual-cost reconciliation, refunds, and audit history. |
 | 23 | Billing | PARTIAL / TEST | Paddle sandbox checkout, subscription lifecycle, duplicate/out-of-order webhooks, and refunds. |
 | 24 | Admin | EXISTING / TEST | Role denial, audited credit adjustments, job inspection, and sensitive-action tests. |
@@ -89,7 +89,7 @@ This checklist follows the uploaded plan's order. “Exists” means code is pre
 
 ### Current-head evidence
 
-- GitHub Actions for commit `c6b7fe6` passed lint, TypeScript typecheck, unit/component tests, and production build (12 test files passed).
+- GitHub Actions for commit `aa50db8` passed lint, TypeScript typecheck, unit/component tests, and production build (16 test files passed).
 - New-project and writing-panel failure-path tests pass in CI; scene-breakdown normalization tests pass in CI. The SQL migration itself still requires application and integration verification against a staging Supabase database.
 - No staging Supabase database, live AI provider, render service, or Paddle sandbox has been exercised from this environment.
 
@@ -101,3 +101,8 @@ This checklist follows the uploaded plan's order. “Exists” means code is pre
 - The creation wizard stores a versioned production brief and an eight-stage plan in `projects.settings`. Script, research, hook/title, and scene prompts now receive those settings; script word targets are derived from the selected duration.
 
 - AI task startup now fails early when the task configuration is missing. Completion settlement is retried once because the database operation is intended to be idempotent; refund failure is surfaced as a reconciliation requirement instead of falsely telling the user their credits were returned.
+
+
+- Project share links are implemented on the branch. Tokens are stored as hashes, passwords as salted scrypt hashes, and the public resolver returns only metadata plus a short-lived signed URL for the selected ready export. Migration `0018_project_share_links.sql` has not been applied to staging.
+- Scene reordering now calls one owner-checked database RPC and normalizes scene positions transactionally. The client no longer fires two independent scene updates and ignores their errors. Migration `0019_atomic_scene_reordering.sql` still requires staging application and SQL integration testing.
+- Restoring a version now uses `0017_atomic_project_versions.sql`; scene replacement, version restore, share-link access, and scene reorder database logic still need staging verification.

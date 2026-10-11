@@ -44,6 +44,14 @@ The hardening branch adds two migrations that must be reviewed and applied in st
 
 These files are not guaranteed to be auto-applied by Drizzle; follow the migration caution above and verify each change in the managed database before deploying the branch.
 
+Additional hardening migrations introduced on this branch:
+- `0017_atomic_project_versions.sql` adds owner-checked transactional version snapshot/restore RPCs.
+- `0018_project_share_links.sql` adds hashed-token share records, password lockout tracking, and server-role-only table access.
+- `0019_atomic_scene_reordering.sql` adds an owner-checked transactional scene-reorder RPC.
+
+Review and apply `0015` through `0019` in order where they have not already been applied, but only after a database backup and staging schema check. The repository has historical duplicate migration prefixes and an incomplete Drizzle journal, so do not assume numeric file order alone means a generic migration command will apply them correctly. Verify the actual database migration records first.
+
+
 
 ## 3. AI Gateway
 
