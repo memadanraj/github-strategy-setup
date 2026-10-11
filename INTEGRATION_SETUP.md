@@ -38,6 +38,13 @@ The `0012_fix_ai_media_models.sql` migration aligns stored media model identifie
 
 The `0013_job_pipeline_hardening.sql` migration adds generation-job event history, an atomic download claim to prevent duplicate clip persistence, duplicate-active-clip protection, and idempotent job completion/failure/refund functions. **Apply and verify this migration in staging before deploying application code that calls `claim_generation_job_download`.** The repository's Drizzle journal does not currently list all existing SQL files, so do not assume a generic Drizzle migration command will apply the complete history. Confirm the managed migration process used by your database, check its applied-migration records, back up the database, then apply only missing migrations in staging.
 
+The hardening branch adds two migrations that must be reviewed and applied in staging before deploying the corresponding code:
+- `0015_atomic_scene_replacement.sql` adds an authenticated transactional RPC for replacing scenes, so a failed insert rolls back the preceding delete.
+- `0016_project_production_settings.sql` adds the non-null `projects.settings` JSONB column used by the creation wizard's production brief and plan.
+
+These files are not guaranteed to be auto-applied by Drizzle; follow the migration caution above and verify each change in the managed database before deploying the branch.
+
+
 ## 3. AI Gateway
 
 Set the server-only secret:

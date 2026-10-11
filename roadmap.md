@@ -9,7 +9,7 @@ The repository contains baseline implementations for authentication, dashboard, 
 - [ ] Phase 2 — projects/scenes/assets CRUD and recovery tests
 - [ ] Phase 3 — central jobs: atomic reservation, async provider lifecycle, idempotent completion/refund (partial; staging concurrency/migration tests remain)
 - [ ] Phase 4 — provider contracts, retries, timeouts, and structured errors
-- [ ] Phase 5 — creation wizard and persisted production plan
+- [ ] Phase 5 — creation wizard and persisted production plan (implemented on branch; staging migration verification remains)
 - [ ] Phase 6 — script/research/hook generation acceptance tests
 - [ ] Phase 7 — image/video generation and safe media persistence
 - [ ] Phase 8 — voice/music/SFX and captions acceptance tests
