@@ -21,6 +21,7 @@ import { statusLabel } from "@/lib/studio";
 import { createProjectVersion, restoreProjectVersion } from "@/lib/project-versions";
 import type { Tables } from "@/integrations/supabase/types";
 import { safeProjectAssetFileName, validateProjectAssetFile } from "@/lib/project-assets";
+import { canMoveScene, moveProjectScene } from "@/lib/project-scenes";
 
 export const Route = createFileRoute("/_authenticated/_studio/projects/$projectId")({
   head: () => ({
@@ -136,13 +137,19 @@ function Scenes({ projectId }: { projectId: string }) {
     refresh();
   }
   async function move(i: number, dir: -1 | 1) {
-    const a = scenes[i], b = scenes[i + dir];
-    if (!a || !b) return;
-    await Promise.all([
-      supabase.from("scenes").update({ position: b.position }).eq("id", a.id),
-      supabase.from("scenes").update({ position: a.position }).eq("id", b.id),
-    ]);
-    refresh();
+    const scene = scenes[i];
+    if (!scene || !canMoveScene(i, dir, scenes.length)) return;
+    try {
+      await moveProjectScene(
+        (args) => supabase.rpc("move_project_scene", args),
+        projectId,
+        scene.id,
+        dir,
+      );
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not reorder scenes. Please try again.");
+    }
   }
   async function remove(id: string) {
     const { error } = await supabase.from("scenes").delete().eq("id", id);
@@ -183,7 +190,7 @@ function Scenes({ projectId }: { projectId: string }) {
       ) : (
         <div className="space-y-3">
           {scenes.map((s, i) => (
-            <SceneRow key={s.id} scene={s} index={i} last={i === scenes.length - 1}
+            <SceneRow key={`${s.id}:${s.updated_at}`} scene={s} index={i} last={i === scenes.length - 1}
               onMove={(d) => move(i, d)} onDelete={() => remove(s.id)} onSaved={refresh} />
           ))}
         </div>

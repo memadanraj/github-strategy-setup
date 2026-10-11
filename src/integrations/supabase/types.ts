@@ -1568,6 +1568,10 @@ export type Database = {
         Args: { _share_id: string }
         Returns: { failed_attempts: number; locked_until: string | null }[]
       }
+      move_project_scene: {
+        Args: { _direction: number; _project_id: string; _scene_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
