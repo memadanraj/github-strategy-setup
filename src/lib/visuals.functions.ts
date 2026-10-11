@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { downloadRemoteMedia } from "./remote-media.server";
+import { downloadRemoteMedia, remoteMediaHeaderVariants } from "./remote-media.server";
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1";
 
@@ -38,23 +38,12 @@ async function fetchMediaBytes(url: string, apiKey: string): Promise<Buffer | nu
   // Provider-supplied output URLs are untrusted. Never send gateway secrets to
   // arbitrary CDNs or attacker-controlled URLs; credentials are only appropriate
   // for the gateway's own origin.
-  let isGatewayOrigin = false;
-  try {
-    isGatewayOrigin = new URL(url).origin === new URL(GATEWAY).origin;
-  } catch {
-    return null;
-  }
-
-  const headerOptions: HeadersInit[] = isGatewayOrigin
-    ? [
-        {},
-        {
-          Authorization: `Bearer ${apiKey}`,
-          "Lovable-API-Key": apiKey,
-          "X-Lovable-AIG-SDK": "tanstack-ai",
-        },
-      ]
-    : [{}];
+  const headerOptions = remoteMediaHeaderVariants(url, GATEWAY, {
+    Authorization: `Bearer ${apiKey}`,
+    "Lovable-API-Key": apiKey,
+    "X-Lovable-AIG-SDK": "tanstack-ai",
+  });
+  if (headerOptions.length === 0) return null;
 
   for (const headers of headerOptions) {
     try {
