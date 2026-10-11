@@ -13,7 +13,9 @@ export class AiGatewayError extends Error {
 }
 
 function isTimeoutError(error: unknown): boolean {
-  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+  if (typeof error !== "object" || error === null || !("name" in error)) return false;
+  const name = (error as { name?: unknown }).name;
+  return name === "TimeoutError" || name === "AbortError";
 }
 
 function parseEventData(data: string): { delta?: string; failed?: string } | null {
