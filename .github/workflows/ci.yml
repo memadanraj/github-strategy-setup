@@ -37,6 +37,9 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      - name: Type check
+        run: bun run typecheck
+
       - name: Unit and component tests
         run: bun run test
 
