@@ -21,7 +21,10 @@ export function validateProjectAssetFile(file: ProjectAssetFileInfo): string | n
 
 /** Keep uploaded filenames within one storage-path segment and bound metadata length. */
 export function safeProjectAssetFileName(name: string): string {
-  const normalized = name.replace(/[\\/]/g, "_").replace(/[\u0000-\u001f\u007f]/g, "");
+  const withoutControlCharacters = Array.from(name)
+    .filter((character) => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127)
+    .join("");
+  const normalized = withoutControlCharacters.replace(/[\\/]/g, "_");
   const safe = normalized.replace(/[^a-zA-Z0-9._() -]/g, "_").trim().slice(0, 120);
   return safe || "uploaded-file";
 }
