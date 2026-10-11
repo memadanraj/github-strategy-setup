@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { statusLabel } from "@/lib/studio";
 import { createProjectVersion, restoreProjectVersion } from "@/lib/project-versions";
 import type { Tables } from "@/integrations/supabase/types";
+import { safeProjectAssetFileName, validateProjectAssetFile } from "@/lib/project-assets";
 
 export const Route = createFileRoute("/_authenticated/_studio/projects/$projectId")({
   head: () => ({
@@ -246,18 +247,62 @@ function Assets({ project }: { project: Tables<"projects"> }) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+
+    const validationError = validateProjectAssetFile(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
     setBusy(true);
-    const path = `${project.user_id}/${project.id}/${crypto.randomUUID()}-${file.name}`;
-    const up = await supabase.storage.from("project-assets").upload(path, file, { contentType: file.type });
-    if (up.error) { setBusy(false); { toast.error(up.error.message); return; } }
-    const { error } = await supabase.from("assets").insert({
-      project_id: project.id, kind: kindOf(file.type), name: file.name, storage_path: path,
-      meta: { size: file.size, type: file.type },
-    });
-    setBusy(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Uploaded");
-    refresh();
+    let uploadedPath: string | null = null;
+    try {
+      const safeName = safeProjectAssetFileName(file.name);
+      const path = `${project.user_id}/${project.id}/${crypto.randomUUID()}-${safeName}`;
+      const uploadResult = await supabase.storage
+        .from("project-assets")
+        .upload(path, file, { contentType: file.type });
+
+      if (uploadResult.error) {
+        toast.error(uploadResult.error.message);
+        return;
+      }
+      uploadedPath = path;
+
+      const { error } = await supabase.from("assets").insert({
+        project_id: project.id,
+        kind: kindOf(file.type),
+        name: file.name.slice(0, 255),
+        storage_path: path,
+        meta: { size: file.size, type: file.type },
+      });
+
+      if (error) {
+        const cleanup = await supabase.storage.from("project-assets").remove([path]);
+        if (cleanup.error) {
+          toast.error(`Couldn't save the asset record, and its uploaded file could not be cleaned up. Contact support with project ID ${project.id}.`);
+          return;
+        }
+        uploadedPath = null;
+        toast.error(error.message);
+        return;
+      }
+
+      uploadedPath = null;
+      toast.success("Uploaded");
+      await refresh();
+    } catch {
+      if (uploadedPath) {
+        const cleanup = await supabase.storage.from("project-assets").remove([uploadedPath]);
+        if (cleanup.error) {
+          toast.error("Upload failed, and temporary-file cleanup also failed. Please contact support.");
+          return;
+        }
+      }
+      toast.error("Upload failed. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function open(a: Tables<"assets">) {
@@ -268,10 +313,24 @@ function Assets({ project }: { project: Tables<"projects"> }) {
   }
 
   async function remove(a: Tables<"assets">) {
-    if (a.storage_path) await supabase.storage.from("project-assets").remove([a.storage_path]);
-    const { error } = await supabase.from("assets").delete().eq("id", a.id);
-    if (error) { toast.error(error.message); return; }
-    refresh();
+    try {
+      if (a.storage_path) {
+        const storageResult = await supabase.storage.from("project-assets").remove([a.storage_path]);
+        if (storageResult.error) {
+          toast.error(`Couldn't remove the file: ${storageResult.error.message}`);
+          return;
+        }
+      }
+
+      const { error } = await supabase.from("assets").delete().eq("id", a.id);
+      if (error) {
+        toast.error("The file was removed, but its asset record could not be deleted. Retry deleting this asset.");
+        return;
+      }
+      await refresh();
+    } catch {
+      toast.error("Couldn't delete this asset. Please check your connection and try again.");
+    }
   }
 
   return (
