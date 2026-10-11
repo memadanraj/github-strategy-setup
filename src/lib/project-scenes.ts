@@ -1,3 +1,31 @@
+type SceneMutationRpcError = { message: string } | null;
+type SceneMutationRpcResult = { data: unknown; error: SceneMutationRpcError };
+type CreateSceneArgs = { _project_id: string; _title: string };
+type DeleteSceneArgs = { _project_id: string; _scene_id: string };
+type CreateSceneRpc = (args: CreateSceneArgs) => PromiseLike<SceneMutationRpcResult>;
+type DeleteSceneRpc = (args: DeleteSceneArgs) => PromiseLike<SceneMutationRpcResult>;
+
+export async function createProjectScene(
+  rpc: CreateSceneRpc,
+  projectId: string,
+  title: string,
+): Promise<string> {
+  const { data, error } = await rpc({ _project_id: projectId, _title: title.trim().slice(0, 120) || "New scene" });
+  if (error) throw new Error(error.message || "Could not create scene.");
+  if (typeof data !== "string" || !data) throw new Error("Database did not return the new scene ID.");
+  return data;
+}
+
+export async function deleteProjectScene(
+  rpc: DeleteSceneRpc,
+  projectId: string,
+  sceneId: string,
+): Promise<void> {
+  const { data, error } = await rpc({ _project_id: projectId, _scene_id: sceneId });
+  if (error) throw new Error(error.message || "Could not delete scene.");
+  if (data !== true) throw new Error("Scene not found in this project.");
+}
+
 type SceneMoveRpcError = { message: string } | null;
 type SceneMoveRpcResult = { data: unknown; error: SceneMoveRpcError };
 type SceneMoveArgs = { _project_id: string; _scene_id: string; _direction: -1 | 1 };

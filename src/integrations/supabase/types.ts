@@ -1572,6 +1572,14 @@ export type Database = {
         Args: { _direction: number; _project_id: string; _scene_id: string }
         Returns: boolean
       }
+      create_project_scene: {
+        Args: { _project_id: string; _title: string }
+        Returns: string
+      }
+      delete_project_scene: {
+        Args: { _project_id: string; _scene_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"

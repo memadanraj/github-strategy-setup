@@ -21,7 +21,7 @@ import { statusLabel } from "@/lib/studio";
 import { createProjectVersion, restoreProjectVersion } from "@/lib/project-versions";
 import type { Tables } from "@/integrations/supabase/types";
 import { safeProjectAssetFileName, validateProjectAssetFile } from "@/lib/project-assets";
-import { canMoveScene, moveProjectScene } from "@/lib/project-scenes";
+import { canMoveScene, createProjectScene, deleteProjectScene, moveProjectScene } from "@/lib/project-scenes";
 
 export const Route = createFileRoute("/_authenticated/_studio/projects/$projectId")({
   head: () => ({
@@ -132,9 +132,16 @@ function Scenes({ projectId }: { projectId: string }) {
   });
 
   async function add() {
-    const { error } = await supabase.from("scenes").insert({ project_id: projectId, position: scenes.length, title: `Scene ${scenes.length + 1}` });
-    if (error) { toast.error(error.message); return; }
-    refresh();
+    try {
+      await createProjectScene(
+        (args) => supabase.rpc("create_project_scene", args),
+        projectId,
+        `Scene ${scenes.length + 1}`,
+      );
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create scene. Please try again.");
+    }
   }
   async function move(i: number, dir: -1 | 1) {
     const scene = scenes[i];
@@ -152,9 +159,16 @@ function Scenes({ projectId }: { projectId: string }) {
     }
   }
   async function remove(id: string) {
-    const { error } = await supabase.from("scenes").delete().eq("id", id);
-    if (error) { toast.error(error.message); return; }
-    refresh();
+    try {
+      await deleteProjectScene(
+        (args) => supabase.rpc("delete_project_scene", args),
+        projectId,
+        id,
+      );
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete scene. Please try again.");
+    }
   }
 
   async function draftWithAi() {
