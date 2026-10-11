@@ -109,7 +109,7 @@ export async function downloadRemoteMedia(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let current: URL;
-  let headers = new Headers(options.headers);
+  const headers = new Headers(options.headers);
 
   try {
     current = validateRemoteMediaUrl(rawUrl);
