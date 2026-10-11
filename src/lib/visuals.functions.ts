@@ -372,7 +372,28 @@ export const generateSceneClip = createServerFn({ method: "POST" })
       _task_slug: "generate_clip", _project_id: data.projectId, _input: { sceneId: data.sceneId },
     });
     if (je || !jobId) {
-      return { ok: false as const, error: je?.message?.includes("INSUFFICIENT_CREDITS") ? "Not enough credits." : "Couldn't start the AI job." };
+      // A concurrent request can win between the initial active-job lookup and
+      // the credit-reserving RPC. Reuse that active job instead of charging or
+      // surfacing a false failure to the second tab.
+      if (je?.message?.includes("JOB_ALREADY_ACTIVE")) {
+        const { data: active } = await supabase
+          .from("generation_jobs")
+          .select("id")
+          .eq("task_slug", "generate_clip")
+          .eq("status", "running")
+          .eq("project_id", data.projectId)
+          .contains("input", { sceneId: data.sceneId })
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (active?.id) return { ok: true as const, jobId: active.id as string };
+      }
+      return {
+        ok: false as const,
+        error: je?.message?.includes("INSUFFICIENT_CREDITS")
+          ? "Not enough credits."
+          : "Couldn't start the AI job.",
+      };
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     try {
@@ -441,20 +462,62 @@ export const checkSceneClip = createServerFn({ method: "POST" })
       }
       if (info.status !== "completed" && info.status !== "succeeded") return { status: "running" as const };
 
+      // Only one poll request may download and persist this provider result.
+      const { data: claimed, error: claimError } = await supabaseAdmin.rpc(
+        "claim_generation_job_download",
+        { _job_id: job.id },
+      );
+      if (claimError) throw new Error("Couldn't claim the clip download stage.");
+      if (!claimed) return { status: "running" as const };
+
       const url: string | undefined = info.url ?? info.video_url ?? info.video?.url ?? info.output?.url;
       const bytes = (url ? await fetchMediaBytes(url, apiKey) : null) ?? (await fetchVideoContent(providerId, apiKey));
-      const sceneId = job.input?.sceneId as string;
-      const { data: project } = await supabaseAdmin.from("projects").select("user_id").eq("id", job.project_id).maybeSingle();
-      const { data: scene } = await supabaseAdmin.from("scenes").select("title").eq("id", sceneId).maybeSingle();
-      const path = `${project!.user_id}/${job.project_id}/${crypto.randomUUID()}.mp4`;
-      const up = await supabaseAdmin.storage.from("project-assets").upload(path, bytes, { contentType: "video/mp4" });
-      if (up.error) throw new Error("Couldn't store the generated file");
-      await supabaseAdmin.from("assets").insert({
-        project_id: job.project_id, kind: "video", name: `${scene?.title ?? "Scene"} — AI video`,
-        storage_path: path, meta: { ai: true, task: "generate_clip", scene_id: sceneId },
-      });
-      await supabaseAdmin.from("scenes").update({ clip_path: path }).eq("id", sceneId);
-      await supabaseAdmin.rpc("complete_generation_job", { _job_id: job.id, _output: { path, provider_job_id: providerId } });
+      const sceneId = job.input?.sceneId as string | undefined;
+      if (!sceneId) throw new Error("Clip job is missing its scene reference.");
+
+      const { data: project, error: projectError } = await supabaseAdmin
+        .from("projects").select("id,user_id").eq("id", job.project_id).maybeSingle();
+      if (projectError || !project?.user_id) throw new Error("Project no longer exists for this clip.");
+      const { data: scene, error: sceneError } = await supabaseAdmin
+        .from("scenes").select("id,title").eq("id", sceneId).eq("project_id", job.project_id).maybeSingle();
+      if (sceneError || !scene) throw new Error("Scene no longer exists for this clip.");
+
+      const path = `${project.user_id}/${job.project_id}/${crypto.randomUUID()}.mp4`;
+      const storage = supabaseAdmin.storage.from("project-assets");
+      const up = await storage.upload(path, bytes, { contentType: "video/mp4" });
+      if (up.error) throw new Error("Couldn't store the generated clip.");
+
+      let assetId: string | undefined;
+      try {
+        const { data: asset, error: assetError } = await supabaseAdmin
+          .from("assets")
+          .insert({
+            project_id: job.project_id,
+            kind: "video",
+            name: `${scene.title || "Scene"} — AI video`,
+            storage_path: path,
+            meta: { ai: true, task: "generate_clip", scene_id: sceneId, provider_job_id: providerId },
+          })
+          .select("id")
+          .single();
+        if (assetError || !asset) throw new Error("Couldn't register the generated clip asset.");
+        assetId = asset.id;
+
+        const { error: sceneUpdateError } = await supabaseAdmin
+          .from("scenes").update({ clip_path: path }).eq("id", sceneId).eq("project_id", job.project_id);
+        if (sceneUpdateError) throw new Error("Couldn't attach the generated clip to its scene.");
+
+        const { error: completionError } = await supabaseAdmin.rpc(
+          "complete_generation_job",
+          { _job_id: job.id, _output: { path, asset_id: assetId, provider_job_id: providerId } },
+        );
+        if (completionError) throw new Error("Couldn't finalize the clip job.");
+      } catch (persistError) {
+        // Best-effort cleanup prevents orphan media when a later DB write fails.
+        if (assetId) await supabaseAdmin.from("assets").delete().eq("id", assetId);
+        await storage.remove([path]);
+        throw persistError;
+      }
       return { status: "complete" as const };
     } catch (e) {
       return fail(e instanceof Error ? e.message : "Clip generation failed");
