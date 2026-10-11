@@ -14,6 +14,13 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: mocks.supabaseFrom },
 }));
 
+vi.mock("@/lib/writing.functions", () => ({
+  researchTopic: vi.fn(),
+  generateHooksTitles: vi.fn(),
+  generateScript: vi.fn(),
+  scriptToScenes: vi.fn(),
+}));
+
 vi.mock("@tanstack/react-query", () => ({
   useQuery: ({ queryKey }: { queryKey: unknown[] }) => ({
     data: queryKey[0] === "writing"
