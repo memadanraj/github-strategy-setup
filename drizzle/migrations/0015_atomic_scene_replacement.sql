@@ -17,9 +17,10 @@ begin
   if _project_id is null then
     raise exception 'Project is required';
   end if;
-  if jsonb_typeof(_scenes) is distinct from 'array'
-     or jsonb_array_length(_scenes) < 1
-     or jsonb_array_length(_scenes) > 60 then
+  if jsonb_typeof(_scenes) is distinct from 'array' then
+    raise exception 'Scene list must be a JSON array';
+  end if;
+  if jsonb_array_length(_scenes) < 1 or jsonb_array_length(_scenes) > 60 then
     raise exception 'Scene list must contain between 1 and 60 scenes';
   end if;
 
