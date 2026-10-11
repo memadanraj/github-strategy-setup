@@ -1,12 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import {
-  createShareToken,
-  hashSharePassword,
-  hashShareToken,
-  verifySharePassword,
-} from "./share-security.server";
 import type {
   CreateProjectShareResult,
   ListProjectSharesResult,
@@ -47,6 +41,7 @@ export const createProjectShareLink = createServerFn({ method: "POST" })
       return { ok: false, error: "Share passwords must be at least 8 characters." };
     }
 
+    const { createShareToken, hashSharePassword, hashShareToken } = await import("./share-security.server");
     const token = createShareToken();
     const days = data.expiresInDays === undefined ? 7 : data.expiresInDays;
     const expiresAt = days === null ? null : new Date(Date.now() + days * 86400000).toISOString();
@@ -127,6 +122,7 @@ export const resolveProjectShare = createServerFn({ method: "POST" })
       return { ok: false, error: unavailable, passwordRequired: false };
     }
 
+    const { hashShareToken, verifySharePassword } = await import("./share-security.server");
     const admin = await getAdmin();
     const { data: share, error: shareError } = await admin.from("project_share_links")
       .select("id,project_id,export_id,expires_at,revoked_at,password_salt,password_hash,locked_until")
