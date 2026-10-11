@@ -36,6 +36,6 @@ describe("atomic Paddle credit-ledger wrapper", () => {
   it("does not mask a failed ledger RPC as a successful grant", async () => {
     const db = { rpc: vi.fn().mockResolvedValue({ data: null, error: { message: "database unavailable" } }) };
     await expect(addCredits(db, "user-1", 100, "purchase", "test", "paddle:txn-2"))
-      .rejects.toThrow("Could not apply the credit ledger transaction.");
+      .rejects.toThrow("Couldn't apply the credit ledger transaction.");
   });
 });
