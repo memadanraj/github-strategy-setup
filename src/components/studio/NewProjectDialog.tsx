@@ -35,23 +35,44 @@ export function NewProjectDialog({ children }: { children: ReactNode }) {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) { setBusy(false); return; }
-    const { data: created, error } = await supabase.from("projects").insert({
-      user_id: u.user.id,
-      title: title.trim() || "Untitled project",
-      idea: idea.trim() || null,
-      format,
-      mode,
-    }).select("id").single();
-    setBusy(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Project created");
-    await queryClient.invalidateQueries({ queryKey: ["projects"] });
-    setOpen(false);
-    setTitle(""); setIdea("");
-    navigate({ to: "/projects/$projectId", params: { projectId: created.id } });
+
+    try {
+      const { data: userData, error: authError } = await supabase.auth.getUser();
+      if (authError || !userData.user) {
+        toast.error("Your session has expired. Sign in again to create a project.");
+        return;
+      }
+
+      const { data: created, error } = await supabase
+        .from("projects")
+        .insert({
+          user_id: userData.user.id,
+          title: title.trim() || "Untitled project",
+          idea: idea.trim() || null,
+          format,
+          mode,
+        })
+        .select("id")
+        .single();
+
+      if (error || !created?.id) {
+        toast.error(error?.message ?? "The project could not be created. Please try again.");
+        return;
+      }
+
+      toast.success("Project created");
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+      setOpen(false);
+      setTitle("");
+      setIdea("");
+      navigate({ to: "/projects/$projectId", params: { projectId: created.id } });
+    } catch {
+      toast.error("Could not create the project. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
