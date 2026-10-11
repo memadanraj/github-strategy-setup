@@ -778,6 +778,7 @@ export type Database = {
           updated_at: string
           user_id: string
           visual_style: string
+          settings: Json
         }
         Insert: {
           created_at?: string
@@ -791,6 +792,7 @@ export type Database = {
           updated_at?: string
           user_id: string
           visual_style?: string
+          settings?: Json
         }
         Update: {
           created_at?: string
@@ -804,6 +806,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           visual_style?: string
+          settings?: Json
         }
         Relationships: []
       }

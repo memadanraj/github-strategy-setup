@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getTargetDurationSeconds, productionPlanContext } from "./production-plan";
 
 const str = { type: "string" } as const;
 const strArr = { type: "array", items: str } as const;
@@ -18,12 +19,12 @@ export type TitleOption = { title: string; why: string };
 const input = z.object({ projectId: z.string().uuid() });
 
 async function loadProject(supabase: any, projectId: string) {
-  const { data: project } = await supabase.from("projects").select("id,title,idea,format").eq("id", projectId).maybeSingle();
+  const { data: project } = await supabase.from("projects").select("id,title,idea,format,settings").eq("id", projectId).maybeSingle();
   if (!project) return null;
   const { data: writing } = await supabase.from("project_writing").select("*").eq("project_id", projectId).maybeSingle();
   const rawTitle = ((project.title as string) || "").trim();
   const idea = ((project.idea as string) || (rawTitle === "Untitled project" ? "" : rawTitle)).trim();
-  return { project, writing, idea, short: project.format === "short" };
+  return { project, writing, idea, settings: project.settings, short: project.format === "short" };
 }
 
 async function saveWriting(supabase: any, projectId: string, patch: Record<string, unknown>) {
@@ -55,7 +56,7 @@ export const researchTopic = createServerFn({ method: "POST" })
       schema: obj({ angle: str, audience: str, key_points: strArr, facts: strArr, questions: strArr }),
       instructions:
         "You are a YouTube content researcher. Find the most compelling angle, define the target audience, list 5-7 key talking points, 4-6 interesting facts worth fact-checking, and 3-5 questions viewers will have. Be specific, avoid filler.",
-      prompt: `Video idea: ${ctx.idea}\nFormat: ${ctx.short ? "YouTube Short" : "Long-form video"}`,
+      prompt: `Video idea: ${ctx.idea}\nFormat: ${ctx.short ? "YouTube Short" : "Long-form video"}${productionPlanContext(ctx.settings)}`,
       persist: async (r) => { await saveWriting(context.supabase, data.projectId, { research: r }); return true; },
     });
   });
@@ -81,7 +82,7 @@ export const generateHooksTitles = createServerFn({ method: "POST" })
       }),
       instructions:
         "You write viral YouTube openings. Produce 5 spoken opening hooks (first 5 seconds, each a different style: question, bold claim, story, stat, curiosity gap) and 6 click-worthy titles under 70 characters that are honest, not clickbait lies. 'why' is one short line explaining the psychology.",
-      prompt: `Video idea: ${ctx.idea}${researchText(ctx.writing?.research)}`,
+      prompt: `Video idea: ${ctx.idea}${researchText(ctx.writing?.research)}${productionPlanContext(ctx.settings)}`,
       persist: async (r) => {
         await saveWriting(context.supabase, data.projectId, { hooks: r.hooks, titles: r.titles });
         return true;
@@ -98,6 +99,8 @@ export const generateScript = createServerFn({ method: "POST" })
     if (!ctx.idea) return { ok: false as const, error: "Add a video idea to the project first." };
     const { runAiTask } = await import("./ai-jobs.server");
     type Out = { acts: { heading: string; text: string }[] };
+    const targetDurationSeconds = getTargetDurationSeconds(ctx.settings, ctx.short ? "short" : "long");
+    const targetWordCount = Math.round(targetDurationSeconds * 2.5);
     return runAiTask<Out, true>({
       supabase: context.supabase as any,
       taskSlug: "full_script",
@@ -106,9 +109,9 @@ export const generateScript = createServerFn({ method: "POST" })
       schemaName: "full_script",
       schema: obj({ acts: { type: "array", items: obj({ heading: str, text: str }) } }),
       instructions: ctx.short
-        ? "Write a tight YouTube Short voiceover script (~130-150 words) in 3 acts: Hook, Payoff, Call to action. Spoken, punchy, no stage directions."
-        : "Write a long-form YouTube voiceover script (~1000-1400 words) in 4-6 acts: Hook, Setup, multiple Development acts with open loops, Climax/payoff, Outro with call to action. Spoken, conversational, no stage directions.",
-      prompt: `Video idea: ${ctx.idea}${data.hook ? `\nOpen with this hook: ${data.hook}` : ""}${researchText(ctx.writing?.research)}`,
+        ? `Write a tight YouTube Short voiceover script of about ${targetWordCount} words in 3 acts: Hook, Payoff, Call to action. Spoken, punchy, no stage directions.`
+        : `Write a long-form YouTube voiceover script of about ${targetWordCount} words in 4-6 acts: Hook, Setup, Development acts with open loops, Climax/payoff, Outro with call to action. Spoken, conversational, no stage directions.`,
+      prompt: `Video idea: ${ctx.idea}${data.hook ? `\nOpen with this hook: ${data.hook}` : ""}${researchText(ctx.writing?.research)}${productionPlanContext(ctx.settings)}`,
       persist: async (r) => {
         const script = r.acts.map((a) => `## ${a.heading}\n\n${a.text.trim()}`).join("\n\n");
         await saveWriting(context.supabase, data.projectId, { script });
@@ -138,7 +141,7 @@ export const scriptToScenes = createServerFn({ method: "POST" })
       }),
       instructions:
         "Split the script into scenes for a video editor. Narration must use the script's exact wording, covering it fully and in order. visual_prompt is a concrete on-screen description. duration_seconds ≈ words / 2.5.",
-      prompt: script.slice(0, 20000),
+      prompt: `${script.slice(0, 20000)}${productionPlanContext(ctx.settings)}`,
       persist: async (r) => {
         const sb = context.supabase as any;
         const { normalizeSceneBreakdown } = await import("./scene-breakdown");
