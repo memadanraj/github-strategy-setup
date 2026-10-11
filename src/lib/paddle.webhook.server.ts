@@ -1,5 +1,6 @@
 import '@tanstack/react-start/server-only';
 import { addCredits, admin, paddleEnv } from "./paddle.server";
+import { verifyPaddleSignature } from "./paddle-security";
 import {
   calculatePackCredits,
   extractPaddleLineItems,
@@ -17,42 +18,6 @@ type CheckoutIntent = {
   fulfilled_subscription_id: string | null;
   expires_at: string;
 };
-
-function hexBytes(hex: string) {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return out;
-}
-
-// Paddle-Signature header: "ts=...;h1=..."
-async function verifyPaddleSignature(payload: string, header: string, secret: string) {
-  const parts = Object.fromEntries(header.split(";").map((part) => {
-    const i = part.indexOf("=");
-    return [part.slice(0, i), part.slice(i + 1)];
-  }));
-  const timestamp = Number(parts["ts"]);
-  const signature = parts["h1"];
-  if (!timestamp || !signature || !/^[0-9a-f]{64}$/i.test(signature)) return false;
-  if (Math.abs(Date.now() / 1000 - timestamp) > 300) return false;
-
-  try {
-    const key = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["verify"],
-    );
-    return await crypto.subtle.verify(
-      "HMAC",
-      key,
-      hexBytes(signature),
-      new TextEncoder().encode(timestamp + ":" + payload),
-    );
-  } catch {
-    return false;
-  }
-}
 
 function intentMarker(customData: unknown): { present: boolean; id: string | null } {
   if (!customData || typeof customData !== "object") return { present: false, id: null };
