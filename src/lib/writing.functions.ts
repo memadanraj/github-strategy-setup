@@ -141,19 +141,16 @@ export const scriptToScenes = createServerFn({ method: "POST" })
       prompt: script.slice(0, 20000),
       persist: async (r) => {
         const sb = context.supabase as any;
-        const { error: de } = await sb.from("scenes").delete().eq("project_id", data.projectId);
-        if (de) throw new Error("Couldn't replace scenes");
-        const rows = r.scenes.slice(0, 60).map((s, i) => ({
-          project_id: data.projectId,
-          position: i,
-          title: s.title.slice(0, 120) || `Scene ${i + 1}`,
-          narration: s.narration,
-          visual_prompt: s.visual_prompt,
-          duration_seconds: Math.max(1, Math.min(120, Math.round(s.duration_seconds))),
-        }));
-        const { error } = await sb.from("scenes").insert(rows);
-        if (error) throw new Error("Couldn't save scenes");
-        return rows.length;
+        const { normalizeSceneBreakdown } = await import("./scene-breakdown");
+        const rows = normalizeSceneBreakdown(r.scenes);
+        const { data: count, error } = await sb.rpc("replace_project_scenes", {
+          _project_id: data.projectId,
+          _scenes: rows,
+        });
+        if (error || count !== rows.length) {
+          throw new Error("Couldn't replace scenes. Your previous scenes were preserved.");
+        }
+        return count;
       },
     });
   });
