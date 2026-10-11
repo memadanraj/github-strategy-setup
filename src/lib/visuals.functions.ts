@@ -35,14 +35,26 @@ function clipSeconds(sceneDuration: number): "4" | "6" | "8" {
 }
 
 async function fetchMediaBytes(url: string, apiKey: string): Promise<Buffer | null> {
-  const headerOptions: HeadersInit[] = [
-    {},
-    {
-      Authorization: `Bearer ${apiKey}`,
-      "Lovable-API-Key": apiKey,
-      "X-Lovable-AIG-SDK": "tanstack-ai",
-    },
-  ];
+  // Provider-supplied output URLs are untrusted. Never send gateway secrets to
+  // arbitrary CDNs or attacker-controlled URLs; credentials are only appropriate
+  // for the gateway's own origin.
+  let isGatewayOrigin = false;
+  try {
+    isGatewayOrigin = new URL(url).origin === new URL(GATEWAY).origin;
+  } catch {
+    return null;
+  }
+
+  const headerOptions: HeadersInit[] = isGatewayOrigin
+    ? [
+        {},
+        {
+          Authorization: `Bearer ${apiKey}`,
+          "Lovable-API-Key": apiKey,
+          "X-Lovable-AIG-SDK": "tanstack-ai",
+        },
+      ]
+    : [{}];
 
   for (const headers of headerOptions) {
     try {
