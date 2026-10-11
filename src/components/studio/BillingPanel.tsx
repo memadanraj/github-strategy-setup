@@ -28,7 +28,8 @@ function loadPaddleJs(): Promise<void> {
 export function BillingPanel({ currentPlan, credits, userId }: { currentPlan: string; credits: number; userId: string }) {
   const status = useServerFn(getPaddleBillingStatus);
   const clientConfig = useServerFn(getPaddleClientConfig);
-  const changePlan = useServerFn(changePaddleSubscriptionPlan);\n  const prepareCheckout = useServerFn(preparePaddleCheckout);
+  const changePlan = useServerFn(changePaddleSubscriptionPlan);
+  const prepareCheckout = useServerFn(preparePaddleCheckout);
   const cancelSub = useServerFn(cancelPaddleSubscription);
   const [busy, setBusy] = useState<string | null>(null);
   const paddleReady = useRef(false);
