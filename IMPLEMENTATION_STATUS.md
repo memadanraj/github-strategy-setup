@@ -10,7 +10,7 @@ This is an evidence-based phase tracker for the master plan. A UI control or sou
 |---|---|---|
 | 0. Repository audit | PARTIAL | Stack, routes, database/auth, provider keys, tests, and migration inconsistencies inspected. Continue auditing during each implementation step. |
 | 1. Foundation (auth, ownership, persistence, errors) | TEST | Existing Supabase auth/RLS; env secrets removed from branch tip. Add automated cross-user access tests and verify signup/login/reset and persistence against staging. |
-| 2. Projects and scenes | EXISTING / TEST | Project/scene APIs and tables exist. Automated CRUD, ordering, deletion, recovery and persistence tests are not comprehensive. |
+| 2. Projects and scenes | PARTIAL / TEST | Project/scene APIs and tables exist. Scene breakdown now validates AI output and uses migration `0015_atomic_scene_replacement.sql` to replace scenes in one transaction, preserving prior scenes on failure. Automated CRUD/order/delete/recovery tests and staging migration application remain. |
 | 3. Central jobs | PARTIAL / TEST | Existing `generation_jobs`; migration `0013_job_pipeline_hardening.sql` adds events, active-clip dedupe, atomic download claim, and idempotent terminal state/refund. Async clip start now checks provider-job-ID persistence, and provider response parsing is normalized with unit tests. Staging migration application, SQL/concurrency tests, and live provider tests are still required. |
 | 4. Provider abstraction | PARTIAL | Render/audio adapters exist. Text/image/video still call gateway from domain functions; define common provider response schemas and add adapter contract tests. |
 | 5. Script generation | EXISTING / TEST | Research/hooks/script/scene drafting flows exist. Mainline operations still execute synchronously and structured generation/persistence needs failure tests. |
@@ -89,6 +89,11 @@ This checklist follows the uploaded plan's order. “Exists” means code is pre
 
 ### Current-head evidence
 
-- GitHub Actions for commit `5c7237b` passed lint, TypeScript typecheck, unit/component tests, and production build.
-- The current project-creation test commit is being validated separately; do not use the prior green result as evidence for later commits.
+- GitHub Actions for commit `551fff5` passed lint, TypeScript typecheck, unit/component tests, and production build.
+- New-project and writing-panel failure-path tests pass in CI; scene-breakdown normalization tests pass in CI. The SQL migration itself still requires application and integration verification against a staging Supabase database.
 - No staging Supabase database, live AI provider, render service, or Paddle sandbox has been exercised from this environment.
+
+
+- New-project creation now catches auth/network/insert failures and always clears its loading state; unit tests cover rejected auth and failed inserts.
+- WritingPanel stops AI generation/scene replacement when saving an edited idea or script fails; component tests cover both paths.
+- Script-to-scenes now validates the generated scene list before mutation and calls a transactional SQL function, preventing the previous delete-then-insert flow from leaving a project with zero scenes when insertion fails.
