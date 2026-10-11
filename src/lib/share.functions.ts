@@ -138,7 +138,7 @@ export const resolveProjectShare = createServerFn({ method: "POST" })
       }
       if (!data.password) return { ok: false, error: "", passwordRequired: true };
 
-      if (!verifySharePassword(data.password, share.password_salt, share.password_hash)) {
+      if (!verifySharePassword(data.password, share.password_salt ?? '', share.password_hash)) {
         const { error } = await admin.rpc("record_project_share_password_failure", { _share_id: share.id });
         if (error) {
           console.error("Share password failure counter could not be updated.");
