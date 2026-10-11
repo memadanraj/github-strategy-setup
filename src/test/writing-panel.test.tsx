@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WritingPanel } from "@/components/studio/WritingPanel";
 
 const mocks = vi.hoisted(() => ({
@@ -32,7 +32,10 @@ vi.mock("sonner", () => ({
 }));
 
 describe("WritingPanel persistence gates", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   beforeEach(() => {
+    vi.stubGlobal("confirm", vi.fn(() => true));
     vi.clearAllMocks();
     mocks.serverFn.mockResolvedValue({ ok: true, value: {} });
     mocks.invalidateQueries.mockResolvedValue(undefined);
@@ -69,10 +72,11 @@ describe("WritingPanel persistence gates", () => {
   });
 
   it("does not replace scenes when saving the edited script fails", async () => {
+    const onScenesChanged = vi.fn();
     render(
       <WritingPanel
         project={{ id: "project-1", idea: "Original idea" } as never}
-        onScenesChanged={vi.fn()}
+        onScenesChanged={onScenesChanged}
       />,
     );
 
@@ -81,7 +85,9 @@ describe("WritingPanel persistence gates", () => {
       { target: { value: "An edited script" } },
     );
     fireEvent.click(screen.getByRole("button", { name: /Break into scenes/ }));
-    // The confirmation is deliberately declined in this test, so allow it.
-    // jsdom's confirm defaults to false; stub it to exercise the persistence gate.
+
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("script write failed"));
+    expect(mocks.serverFn).not.toHaveBeenCalled();
+    expect(onScenesChanged).not.toHaveBeenCalled();
   });
 });
