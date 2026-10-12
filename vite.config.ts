@@ -8,9 +8,9 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 // Publishable (public) backend values, baked in as a fallback because the imported
 // repo's .gitignore excludes .env from hosted builds.
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://hvjdjftooywclofsykhd.supabase.co";
+const SUPABASE_URL = process.env["VITE_SUPABASE_URL"] || "https://hvjdjftooywclofsykhd.supabase.co";
 const SUPABASE_KEY =
-  process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "sb_publishable_At8BlZWbQZWJSj-v7sLvEw_YqhlUKWP";
+  process.env["VITE_SUPABASE_PUBLISHABLE_KEY"] || "sb_publishable_At8BlZWbQZWJSj-v7sLvEw_YqhlUKWP";
 
 export default defineConfig({
   vite: {
