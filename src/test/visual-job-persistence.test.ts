@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   persistGeneratedVisual,
+  settleVisualJobFailure,
   type VisualJobFailureState,
 } from "@/lib/visual-job-persistence";
 
@@ -31,6 +32,43 @@ function makeOperations(overrides: Partial<{
   return { operations, output };
 }
 
+describe("checked visual-job settlement", () => {
+  it("preserves media when the database confirms completion after a lost response", async () => {
+    const failJob = vi.fn(async (): Promise<VisualJobFailureState> => "already_complete");
+    const cleanupAsset = vi.fn(async () => undefined);
+    const cleanupUpload = vi.fn(async () => undefined);
+    const outcome = await settleVisualJobFailure(failJob, "completion response failed", {
+      completionMayHaveSucceeded: true,
+      cleanupAsset,
+      cleanupUpload,
+    });
+    expect(outcome).toMatchObject({ state: "already_complete", completed: true, error: "" });
+    expect(cleanupAsset).not.toHaveBeenCalled();
+    expect(cleanupUpload).not.toHaveBeenCalled();
+  });
+
+  it("does not claim a refund or clean media when settlement cannot be confirmed", async () => {
+    const failJob = vi.fn(async (): Promise<VisualJobFailureState> => { throw new Error("database unavailable"); });
+    const cleanupAsset = vi.fn(async () => undefined);
+    const cleanupUpload = vi.fn(async () => undefined);
+    const outcome = await settleVisualJobFailure(failJob, "scene update failed", { cleanupAsset, cleanupUpload });
+    expect(outcome.state).toBeNull();
+    expect(outcome.error).toContain("credit state needs reconciliation");
+    expect(outcome.error).not.toContain("Your credits were refunded.");
+    expect(cleanupAsset).not.toHaveBeenCalled();
+    expect(cleanupUpload).not.toHaveBeenCalled();
+  });
+
+  it("claims a refund only after the database confirms failure", async () => {
+    const failJob = vi.fn(async (): Promise<VisualJobFailureState> => "failed_refunded");
+    const cleanupAsset = vi.fn(async () => undefined);
+    const cleanupUpload = vi.fn(async () => undefined);
+    const outcome = await settleVisualJobFailure(failJob, "provider failed", { cleanupAsset, cleanupUpload });
+    expect(outcome.error).toContain("Your credits were refunded.");
+    expect(cleanupAsset).toHaveBeenCalledTimes(1);
+    expect(cleanupUpload).toHaveBeenCalledTimes(1);
+  });
+});
 describe("generated visual persistence", () => {
   it("uploads, registers, attaches and settles a job in order", async () => {
     const calls: string[] = [];
