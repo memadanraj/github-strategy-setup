@@ -163,6 +163,21 @@ describe("generated visual persistence", () => {
     }
   });
 
+  it("preserves the uploaded file when asset cleanup fails", async () => {
+    const setup = makeOperations({
+      attachScene: vi.fn(async () => { throw new Error("scene update failed"); }),
+      cleanupAsset: vi.fn(async () => { throw new Error("database cleanup failed"); }),
+    });
+    const result = await persistGeneratedVisual(setup.operations);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("Your credits were refunded.");
+      expect(result.error).toContain("preserved because record cleanup failed");
+    }
+    expect(setup.operations.cleanupAsset).toHaveBeenCalledTimes(1);
+    expect(setup.operations.cleanupUpload).not.toHaveBeenCalled();
+  });
   it("does not claim a refund when no reservation existed", async () => {
     const setup = makeOperations({
       prepare: vi.fn(async () => { throw new Error("provider timeout"); }),
