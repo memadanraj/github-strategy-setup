@@ -28,19 +28,126 @@ async function doneJob(id:string,out:any){
 }
 
 export const generateSceneVoiceover=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),sceneId:z.string().uuid(),voiceId:z.string().uuid(),instructions:z.string().max(500).optional(),speed:z.number().min(.25).max(4).optional()}).parse(d)).handler(async({data,context})=>{
- const s:any=context.supabase; const scene=(await s.from("scenes").select("id,title,narration").eq("id",data.sceneId).eq("project_id",data.projectId).maybeSingle()).data;
- if(!scene)return{ok:false,error:"Scene not found."}; if(!scene.narration?.trim())return{ok:false,error:"Add narration first."};
- const voice=(await s.from("voices").select("id,provider,provider_voice_id,name").eq("id",data.voiceId).maybeSingle()).data;if(!voice)return{ok:false,error:"Voice not found."};
- let id:string;try{id=await job(s,"tts_voiceover",data.projectId,{sceneId:data.sceneId,voiceId:data.voiceId})}catch(e:any){return{ok:false,error:e.message.includes("INSUFFICIENT_CREDITS")?"Not enough credits.":"Couldn't start voiceover job."}}
- try{const p=voiceProvider(voice.provider);const audio=await p.synthesize({text:scene.narration,voiceId:voice.provider_voice_id,instructions:data.instructions,speed:data.speed});
-  const hash=createHash("sha256").update(scene.narration).digest("hex"),path=`${context.userId}/${data.projectId}/audio/voiceovers/${crypto.randomUUID()}.mp3`;
-  const up=await db.storage.from("project-assets").upload(path,audio.bytes,{contentType:audio.contentType});if(up.error)throw new Error("Couldn't store voiceover");
-  const a=(await db.from("assets").insert({project_id:data.projectId,scene_id:data.sceneId,kind:"voice",name:`${scene.title} — ${voice.name}`,storage_path:path,meta:{provider:voice.provider,model:voice.provider==="openai"?"gpt-4o-mini-tts":"eleven_v3",text_hash:hash}}).select("id").single()).data;
-  if(!a)throw new Error("Couldn't register voiceover asset");
-  const v=(await db.from("voiceovers").insert({project_id:data.projectId,scene_id:data.sceneId,voice_id:data.voiceId,generation_job_id:id,asset_id:a.id,provider:voice.provider,model:voice.provider==="openai"?"gpt-4o-mini-tts":"eleven_v3",text:scene.narration,text_hash:hash,status:"ready"}).select("id").single()).data;if(!v)throw new Error("Couldn't register voiceover");
-  await db.from("scene_audio").upsert({project_id:data.projectId,scene_id:data.sceneId,voiceover_id:v.id,updated_at:new Date().toISOString()},{onConflict:"scene_id"});await doneJob(id,{voiceoverId:v.id,assetId:a.id,path});return{ok:true,url:await url(path),voiceoverId:v.id}
- }catch(e:any){const message=e instanceof Error?e.message:"Audio generation failed.";const outcome=await failJob(id,message);return{ok:false,error:outcome.completed?"The job completed but its response could not be confirmed. Refresh the project to see the saved result.":outcome.error}}
-});
+ const s:any=context.supabase;
+ const sceneResult=await s.from("scenes").select("id,title,narration").eq("id",data.sceneId).eq("project_id",data.projectId).maybeSingle();
+ if(sceneResult.error||!sceneResult.data)return{ok:false,error:"Scene not found."};
+ const scene=sceneResult.data;
+ if(!scene.narration?.trim())return{ok:false,error:"Add narration first."};
+ const voiceResult=await s.from("voices").select("id,provider,provider_voice_id,name").eq("id",data.voiceId).maybeSingle();
+ if(voiceResult.error||!voiceResult.data)return{ok:false,error:"Voice not found."};
+ const voice=voiceResult.data;
+ let id:string;
+ try{id=await job(s,"tts_voiceover",data.projectId,{sceneId:data.sceneId,voiceId:data.voiceId})}
+ catch(e:any){return{ok:false,error:e.message?.includes("INSUFFICIENT_CREDITS")?"Not enough credits.":"Couldn't start voiceover job."}}
+
+ let outputPath:string|undefined;
+ let outputAssetId:string|undefined;
+ let outputVoiceoverId:string|undefined;
+ let playbackUrl:string|undefined;
+ let uploadAttempted=false;
+ let assetInsertAttempted=false;
+ let voiceoverInsertAttempted=false;
+ let sceneAudioUpsertAttempted=false;
+ let previousSceneAudio:any=null;
+ let previousSceneAudioLoaded=false;
+ let completionAttempted=false;
+
+ try{
+  const provider=voiceProvider(voice.provider);
+  const audio=await provider.synthesize({text:scene.narration,voiceId:voice.provider_voice_id,instructions:data.instructions,speed:data.speed});
+  const hash=createHash("sha256").update(scene.narration).digest("hex");
+  outputPath=context.userId+"/"+data.projectId+"/audio/voiceovers/"+crypto.randomUUID()+".mp3";
+
+  uploadAttempted=true;
+  const upload=await db.storage.from("project-assets").upload(outputPath,audio.bytes,{contentType:audio.contentType});
+  if(upload.error)throw new Error("Couldn't store voiceover.");
+
+  assetInsertAttempted=true;
+  const assetResult=await db.from("assets").insert({
+    project_id:data.projectId,
+    scene_id:data.sceneId,
+    kind:"voice",
+    name:scene.title+" — "+voice.name,
+    storage_path:outputPath,
+    meta:{provider:voice.provider,model:voice.provider==="openai"?"gpt-4o-mini-tts":"eleven_v3",text_hash:hash}
+  }).select("id").single();
+  if(assetResult.error||!assetResult.data?.id)throw new Error("Couldn't register voiceover asset.");
+  outputAssetId=assetResult.data.id;
+
+  voiceoverInsertAttempted=true;
+  const voiceoverResult=await db.from("voiceovers").insert({
+    project_id:data.projectId,
+    scene_id:data.sceneId,
+    voice_id:data.voiceId,
+    generation_job_id:id,
+    asset_id:outputAssetId,
+    provider:voice.provider,
+    model:voice.provider==="openai"?"gpt-4o-mini-tts":"eleven_v3",
+    text:scene.narration,
+    text_hash:hash,
+    status:"ready"
+  }).select("id").single();
+  if(voiceoverResult.error||!voiceoverResult.data?.id)throw new Error("Couldn't register voiceover.");
+  outputVoiceoverId=voiceoverResult.data.id;
+
+  const previous=await db.from("scene_audio").select("*").eq("project_id",data.projectId).eq("scene_id",data.sceneId).maybeSingle();
+  if(previous.error)throw new Error("Couldn't read the existing scene audio settings.");
+  previousSceneAudio=previous.data;
+  previousSceneAudioLoaded=true;
+
+  sceneAudioUpsertAttempted=true;
+  const attach=await db.from("scene_audio").upsert({
+    project_id:data.projectId,
+    scene_id:data.sceneId,
+    voiceover_id:outputVoiceoverId,
+    updated_at:new Date().toISOString()
+  },{onConflict:"scene_id"});
+  if(attach.error)throw new Error("Couldn't attach voiceover to the scene.");
+
+  playbackUrl=await url(outputPath);
+  completionAttempted=true;
+  await doneJob(id,{voiceoverId:outputVoiceoverId,assetId:outputAssetId,path:outputPath});
+  return{ok:true,url:playbackUrl,voiceoverId:outputVoiceoverId};
+ }catch(e:any){
+  const message=e instanceof Error?e.message:"Audio generation failed.";
+  const outcome=await failJob(id,message,{
+   completionMayHaveSucceeded:completionAttempted,
+   cleanupAsset:outputPath&&(assetInsertAttempted||voiceoverInsertAttempted||sceneAudioUpsertAttempted)?async()=>{
+    const problems:string[]=[];
+    let voiceoverIdForCleanup=outputVoiceoverId;
+    if(!voiceoverIdForCleanup&&voiceoverInsertAttempted){
+     const lookup=await db.from("voiceovers").select("id").eq("generation_job_id",id).maybeSingle();
+     if(lookup.error)problems.push("voiceover lookup");
+     else voiceoverIdForCleanup=lookup.data?.id;
+    }
+    if(sceneAudioUpsertAttempted&&previousSceneAudioLoaded&&voiceoverIdForCleanup){
+     const currentAudio=await db.from("scene_audio").select("*").eq("project_id",data.projectId).eq("scene_id",data.sceneId).maybeSingle();
+     if(currentAudio.error)problems.push("scene audio lookup");
+     else if(currentAudio.data?.voiceover_id===voiceoverIdForCleanup){
+      const restored=previousSceneAudio
+       ? await db.from("scene_audio").upsert(previousSceneAudio,{onConflict:"scene_id"})
+       : await db.from("scene_audio").delete().eq("id",currentAudio.data.id).eq("voiceover_id",voiceoverIdForCleanup);
+      if(restored.error)problems.push("scene audio restore");
+     }
+    }
+    if(voiceoverInsertAttempted){
+     const deleted=await db.from("voiceovers").delete().eq("generation_job_id",id);
+     if(deleted.error)problems.push("voiceover record");
+    }
+    if(assetInsertAttempted){
+     const deleted=await db.from("assets").delete().eq("project_id",data.projectId).eq("storage_path",outputPath);
+     if(deleted.error)problems.push("asset record");
+    }
+    if(problems.length)throw new Error("Cleanup failed for "+problems.join(", ")+".");
+   }:undefined,
+   cleanupUpload:uploadAttempted&&outputPath?async()=>{
+    const removed=await db.storage.from("project-assets").remove([outputPath]);
+    if(removed.error)throw new Error("Uploaded voiceover cleanup failed.");
+   }:undefined
+  });
+  if(outcome.completed&&outputVoiceoverId&&playbackUrl)return{ok:true,url:playbackUrl,voiceoverId:outputVoiceoverId};
+  return{ok:false,error:outcome.error};
+ });
 
 export const previewVoice=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),voiceId:z.string().uuid()}).parse(d)).handler(async({data,context})=>{
  const s:any=context.supabase;const v=(await s.from("voices").select("provider,provider_voice_id,preview_url").eq("id",data.voiceId).maybeSingle()).data;if(!v)return{ok:false,error:"Voice not found."};if(v.preview_url)return{ok:true,url:v.preview_url,charged:false};
