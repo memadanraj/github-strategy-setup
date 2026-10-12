@@ -1583,6 +1583,14 @@ export type Database = {
         Args: { _job_id: string }
         Returns: string
       }
+      rebuild_project_timeline: {
+        Args: { _project_id: string }
+        Returns: Json
+      }
+      regenerate_project_captions: {
+        Args: { _project_id: string }
+        Returns: Json
+      }
       delete_project_scene: {
         Args: { _project_id: string; _scene_id: string }
         Returns: boolean

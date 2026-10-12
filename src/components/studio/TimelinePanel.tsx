@@ -6,6 +6,7 @@ import { Play, Pause, RotateCcw, Wand2, Captions as CaptionsIcon, Scissors, Lock
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import { rebuildProjectTimeline, regenerateProjectCaptions } from "@/lib/timeline-operations";
 
 const db:any = supabase;
 const PX = 72;
@@ -92,34 +93,17 @@ export function TimelinePanel({ project }: { project: Project }) {
     if (clips.length && !confirm("Rebuild the timeline? Existing timeline clips will be replaced.")) return;
     setBuilding(true);
     try {
-      if (clips.length) {
-        const d = await db.from("timeline_clips").delete().eq("project_id", project.id);
-        if (d.error) throw d.error;
-      }
-      let videoTrack = tracks.find((t:any)=>t.track_type==="video");
-      let audioTrack = tracks.find((t:any)=>t.track_type==="audio");
-      let captionTrack = tracks.find((t:any)=>t.track_type==="caption");
-      if (!videoTrack) videoTrack = await addTrack("Video", "video", 0);
-      if (!audioTrack) audioTrack = await addTrack("Audio", "audio", 1);
-      if (!captionTrack) captionTrack = await addTrack("Captions", "caption", 2);
-      let cursor = 0;
-      const visualRows:any[] = [];
-      for (const scene of scenes) {
-        const dur = Math.max(0.1, Number(scene.duration_seconds || 5));
-        visualRows.push({
-          project_id: project.id, track_id: videoTrack.id, scene_id: scene.id,
-          clip_type: scene.clip_path ? "video" : "image", start_seconds: cursor,
-          duration_seconds: dur, metadata: { source: scene.clip_path || scene.image_path || null }
-        });
-        cursor += dur;
-      }
-      const ins = await db.from("timeline_clips").insert(visualRows);
-      if (ins.error) throw ins.error;
-      await db.from("timeline_settings").upsert({ project_id: project.id, width: project.format === "short" ? 1080 : 1920, height: project.format === "short" ? 1920 : 1080, updated_at: new Date().toISOString() });
+      const result = await rebuildProjectTimeline(
+        (args) => db.rpc("rebuild_project_timeline", args),
+        project.id,
+      );
       await refresh();
-      toast.success("Timeline built from scenes.");
-    } catch (e:any) { toast.error(e.message || "Couldn't build timeline."); }
-    finally { setBuilding(false); }
+      toast.success(`Timeline built from scenes (${result.clipCount} clips).`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not rebuild timeline. Existing clips were preserved.");
+    } finally {
+      setBuilding(false);
+    }
   }
 
   async function generateCaptions() {
@@ -127,33 +111,17 @@ export function TimelinePanel({ project }: { project: Project }) {
     if (captions.length && !confirm("Replace existing captions?")) return;
     setCaptioning(true);
     try {
-      await db.from("captions").delete().eq("project_id", project.id);
-      let cursor = 0;
-      const rows:any[] = [];
-      for (const scene of scenes) {
-        const text = String(scene.narration || "").trim();
-        const dur = Math.max(0.1, Number(scene.duration_seconds || 5));
-        if (text) {
-          const words = text.split(/\s+/).filter(Boolean);
-          const chunkSize = 5;
-          const count = Math.ceil(words.length / chunkSize);
-          for (let i=0;i<count;i++) {
-            const chunk = words.slice(i*chunkSize,(i+1)*chunkSize).join(" ");
-            const start = cursor + (dur * i / count);
-            const end = cursor + (dur * (i+1) / count);
-            rows.push({ project_id: project.id, scene_id: scene.id, text: chunk, start_seconds: start, end_seconds: end, position: "bottom" });
-          }
-        }
-        cursor += dur;
-      }
-      if (rows.length) {
-        const r = await db.from("captions").insert(rows);
-        if (r.error) throw r.error;
-      }
+      const result = await regenerateProjectCaptions(
+        (args) => db.rpc("regenerate_project_captions", args),
+        project.id,
+      );
       await refresh();
-      toast.success(`Created ${rows.length} caption cues.`);
-    } catch (e:any) { toast.error(e.message || "Caption generation failed."); }
-    finally { setCaptioning(false); }
+      toast.success(`Created ${result.cueCount} caption cues.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Caption generation failed. Existing captions were preserved.");
+    } finally {
+      setCaptioning(false);
+    }
   }
 
   async function addTrack(name:string,type:string,position:number) {
