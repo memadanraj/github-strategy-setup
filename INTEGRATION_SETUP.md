@@ -50,6 +50,9 @@ Additional hardening migrations introduced on this branch:
 - `0019_atomic_scene_reordering.sql` adds an owner-checked transactional scene-reorder RPC.
 - `0020_atomic_scene_crud.sql` adds owner-checked transactional scene creation and deletion, with position normalization after deletion.
 - `0021_checked_visual_job_settlement.sql` adds a checked, service-role-only failure/refund RPC for image and asynchronous clip workflows. It returns explicit states for refunded failures, failures without reservations, already-failed/complete jobs, missing jobs, and non-active jobs so callers do not assume a refund.
+- `0023_atomic_timeline_and_captions.sql` adds owner-checked transaction RPCs for timeline rebuild and caption regeneration so deletes/inserts roll back together on failure.
+- `0024_timeline_timing_bounds.sql` adds database-side 24-hour clip/caption timing limits, combined clip-end checks, 80-character transition limits, 5,000-character caption limits and the 0.1-second timeline-grid lower bound. These checks are `NOT VALID` to avoid silently modifying historical rows during migration.
+
 
 Review and apply `0015` through `0021` in dependency order where they have not already been applied, but only after a database backup and staging schema check. The repository has historical duplicate migration prefixes and an incomplete Drizzle journal, so do not assume numeric file order alone means a generic migration command will apply them correctly. Verify the actual database migration records first.
 
@@ -58,6 +61,15 @@ Review and apply `0015` through `0021` in dependency order where they have not a
 ### Legacy Stripe SQL files
 
 The app's active billing implementation in this branch is Paddle. The repository still contains historical `0011_billing.sql` with Stripe tables/columns while another file shares the `0011_*` prefix and establishes Paddle RLS policies. **Do not run the legacy Stripe migration blindly on a Paddle installation and do not delete/edit historical migrations to hide the conflict.** Inspect the database's applied-migration ledger and existing tables first. For a fresh database, use a reviewed, ordered migration plan based on the intended Paddle schema; for an existing database, apply only audited missing migrations in staging.
+
+Before production, audit historical records in staging for out-of-range values in `timeline_clips`, `captions`, and `timeline_settings`. Since migration `0024` uses `NOT VALID` constraints, new writes are checked but old rows are not scanned automatically. Once any violations are reviewed and corrected with the project owner, validate the checks explicitly:
+```sql
+alter table public.timeline_clips validate constraint timeline_clips_time_upper_bounds;
+alter table public.timeline_clips validate constraint timeline_clips_transition_length_bounds;
+alter table public.captions validate constraint captions_time_and_text_upper_bounds;
+alter table public.timeline_settings validate constraint timeline_settings_grid_lower_bound;
+```
+Do not run validation in production before the staging audit and backup.
 
 ## 3. AI Gateway
 
