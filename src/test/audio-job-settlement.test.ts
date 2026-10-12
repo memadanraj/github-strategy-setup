@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { completeAudioJob, failAudioJob } from "@/lib/audio-job-settlement";
+import {
+  completeAudioJob,
+  failAudioJob,
+  restoreSceneAudioVoiceover,
+} from "@/lib/audio-job-settlement";
 
 describe("audio generation job settlement", () => {
   it("checks the completion RPC result", async () => {

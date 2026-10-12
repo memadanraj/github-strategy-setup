@@ -4,7 +4,12 @@ import {createHash} from "node:crypto";
 import {requireSupabaseAuth} from "@/integrations/supabase/auth-middleware";
 import {supabaseAdmin} from "@/integrations/supabase/client.server";
 import {voiceProvider,musicProvider} from "./audio.providers.server";
-import {completeAudioJob,failAudioJob,type AudioJobFailureCleanup , restoreSceneAudioVoiceover } from "./audio-job-settlement";
+import {
+  completeAudioJob,
+  failAudioJob,
+  restoreSceneAudioVoiceover,
+  type AudioJobFailureCleanup,
+} from "./audio-job-settlement";
 
 const db:any=supabaseAdmin;
 
