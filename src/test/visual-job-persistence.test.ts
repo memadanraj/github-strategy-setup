@@ -50,7 +50,7 @@ describe("generated visual persistence", () => {
   it("confirms a refund before saying credits were refunded when upload fails", async () => {
     const setup = makeOperations({
       upload: vi.fn(async () => { throw new Error("storage unavailable"); }),
-      failJob: vi.fn(async () => "failed_refunded"),
+      failJob: vi.fn(async (): Promise<VisualJobFailureState> => "failed_refunded"),
     });
     const result = await persistGeneratedVisual(setup.operations);
 
@@ -86,7 +86,7 @@ describe("generated visual persistence", () => {
   it("preserves persisted media if completion committed but its response failed", async () => {
     const setup = makeOperations({
       completeJob: vi.fn(async () => { throw new Error("response was lost"); }),
-      failJob: vi.fn(async () => "already_complete"),
+      failJob: vi.fn(async (): Promise<VisualJobFailureState> => "already_complete"),
     });
     const result = await persistGeneratedVisual(setup.operations);
 
@@ -128,7 +128,7 @@ describe("generated visual persistence", () => {
   it("does not claim a refund when no reservation existed", async () => {
     const setup = makeOperations({
       prepare: vi.fn(async () => { throw new Error("provider timeout"); }),
-      failJob: vi.fn(async () => "failed_without_reservation"),
+      failJob: vi.fn(async (): Promise<VisualJobFailureState> => "failed_without_reservation"),
     });
     const result = await persistGeneratedVisual(setup.operations);
 
