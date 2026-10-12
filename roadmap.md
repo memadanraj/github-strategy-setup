@@ -7,11 +7,11 @@ The repository contains baseline implementations for authentication, dashboard, 
 - [x] Phase 0 — repository audit and baseline inventory
 - [ ] Phase 1 — foundation: auth, ownership, persistence, error recovery (partial; CI and persistence-failure tests exist; staging auth/RLS verification remains)
 - [ ] Phase 2 — projects/scenes/assets CRUD and recovery tests (transactional scene replacement, version recovery, reordering/create/delete, asset validation, and checked image/clip/audio settlement implemented; SQL/RLS staging integration tests remain)
-- [ ] Phase 3 — central jobs: atomic reservation, async provider lifecycle, idempotent completion/refund (partial; checked visual-job failure/refund RPC and client tests added; staging concurrency/migration tests remain)
-- [ ] Phase 4 — provider contracts, retries, timeouts, and structured errors
+- [ ] Phase 3 — central jobs: atomic reservation, async provider lifecycle, idempotent completion/refund (checked visual and synchronous AI settlement paths added; 27 test files pass in CI; staging concurrency/migration tests remain)
+- [ ] Phase 4 — provider contracts, retries, timeouts, and structured errors (partial; visual image/video calls and metadata responses are bounded; shared adapters for all providers and staging verification remain)
 - [ ] Phase 5 — creation wizard and persisted production plan (implemented on branch; staging migration verification remains)
 - [ ] Phase 6 — script/research/hook generation acceptance tests
-- [ ] Phase 7 — image/video generation and safe media persistence
+- [ ] Phase 7 — image/video generation and safe media persistence (checked asset/scene/job writes, compensating cleanup, bounded provider calls and failure-state tests added; staging verification remains)
 - [ ] Phase 8 — voice/music/SFX and captions acceptance tests
 - [ ] Phase 9 — timeline/editor persistence and interaction tests
 - [ ] Phase 10 — rendering, export integrity, and playback validation
