@@ -295,6 +295,15 @@ async function runVisualJob(opts: {
       if (error) throw new Error("Couldn't finalize the AI generation job.");
     },
     cleanupAsset: async (out) => {
+      const sceneColumn = out.kind === "image" ? "image_path" : "clip_path";
+      const sceneCleanup = await supabaseAdmin
+        .from("scenes")
+        .update(out.kind === "image" ? { image_path: null } : { clip_path: null })
+        .eq("id", opts.sceneId)
+        .eq("project_id", opts.projectId)
+        .eq(sceneColumn, out.path);
+      if (sceneCleanup.error) throw new Error("Scene media reference cleanup failed.");
+
       const { error } = await supabaseAdmin
         .from("assets")
         .delete()
