@@ -261,6 +261,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          idempotency_key: string | null
           kind: string
           user_id: string
         }
@@ -269,6 +270,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          idempotency_key?: string | null
           kind: string
           user_id: string
         }
@@ -277,6 +279,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          idempotency_key?: string | null
           kind?: string
           user_id?: string
         }
@@ -354,6 +357,47 @@ export type Database = {
             columns: ["render_job_id"]
             isOneToOne: false
             referencedRelation: "render_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      generation_job_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          from_status: string | null
+          id: string
+          job_id: string
+          metadata: Json
+          to_status: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          from_status?: string | null
+          id?: string
+          job_id: string
+          metadata?: Json
+          to_status?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          from_status?: string | null
+          id?: string
+          job_id?: string
+          metadata?: Json
+          to_status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_job_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "generation_jobs"
             referencedColumns: ["id"]
           },
         ]
@@ -484,6 +528,53 @@ export type Database = {
           },
         ]
       }
+      paddle_checkout_intents: {
+        Row: {
+          created_at: string
+          expires_at: string
+          fulfilled_subscription_id: string | null
+          fulfilled_transaction_id: string | null
+          id: string
+          item_kind: string
+          item_slug: string
+          paddle_price_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          fulfilled_subscription_id?: string | null
+          fulfilled_transaction_id?: string | null
+          id?: string
+          item_kind: string
+          item_slug: string
+          paddle_price_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          fulfilled_subscription_id?: string | null
+          fulfilled_transaction_id?: string | null
+          id?: string
+          item_kind?: string
+          item_slug?: string
+          paddle_price_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paddle_checkout_intents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       paddle_customers: {
         Row: {
           created_at: string
@@ -524,22 +615,31 @@ export type Database = {
           created_at: string
           event_type: string
           id: string
+          last_error: string | null
           metadata: Json
           paddle_event_id: string
+          processing_started_at: string | null
+          processing_status: string
         }
         Insert: {
           created_at?: string
           event_type: string
           id?: string
+          last_error?: string | null
           metadata?: Json
           paddle_event_id: string
+          processing_started_at?: string | null
+          processing_status?: string
         }
         Update: {
           created_at?: string
           event_type?: string
           id?: string
+          last_error?: string | null
           metadata?: Json
           paddle_event_id?: string
+          processing_started_at?: string | null
+          processing_status?: string
         }
         Relationships: []
       }
@@ -697,48 +797,60 @@ export type Database = {
       }
       project_share_links: {
         Row: {
-          created_at: string;
-          export_id: string;
-          expires_at: string | null;
-          failed_password_attempts: number;
-          id: string;
-          locked_until: string | null;
-          password_hash: string | null;
-          password_salt: string | null;
-          project_id: string;
-          revoked_at: string | null;
-          token_hash: string;
-        };
+          created_at: string
+          expires_at: string | null
+          export_id: string
+          failed_password_attempts: number
+          id: string
+          locked_until: string | null
+          password_hash: string | null
+          password_salt: string | null
+          project_id: string
+          revoked_at: string | null
+          token_hash: string
+        }
         Insert: {
-          created_at?: string;
-          export_id: string;
-          expires_at?: string | null;
-          failed_password_attempts?: number;
-          id?: string;
-          locked_until?: string | null;
-          password_hash?: string | null;
-          password_salt?: string | null;
-          project_id: string;
-          revoked_at?: string | null;
-          token_hash: string;
-        };
+          created_at?: string
+          expires_at?: string | null
+          export_id: string
+          failed_password_attempts?: number
+          id?: string
+          locked_until?: string | null
+          password_hash?: string | null
+          password_salt?: string | null
+          project_id: string
+          revoked_at?: string | null
+          token_hash: string
+        }
         Update: {
-          created_at?: string;
-          export_id?: string;
-          expires_at?: string | null;
-          failed_password_attempts?: number;
-          id?: string;
-          locked_until?: string | null;
-          password_hash?: string | null;
-          password_salt?: string | null;
-          project_id?: string;
-          revoked_at?: string | null;
-          token_hash?: string;
-        };
+          created_at?: string
+          expires_at?: string | null
+          export_id?: string
+          failed_password_attempts?: number
+          id?: string
+          locked_until?: string | null
+          password_hash?: string | null
+          password_salt?: string | null
+          project_id?: string
+          revoked_at?: string | null
+          token_hash?: string
+        }
         Relationships: [
-          { foreignKeyName: "project_share_links_export_id_fkey"; columns: ["export_id"]; isOneToOne: false; referencedRelation: "exports"; referencedColumns: ["id"]; },
-          { foreignKeyName: "project_share_links_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"]; }
-        ];
+          {
+            foreignKeyName: "project_share_links_export_id_fkey"
+            columns: ["export_id"]
+            isOneToOne: false
+            referencedRelation: "exports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_share_links_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       project_versions: {
         Row: {
@@ -817,13 +929,13 @@ export type Database = {
           id: string
           idea: string | null
           mode: string
+          settings: Json
           status: string
           thumbnail_url: string | null
           title: string
           updated_at: string
           user_id: string
           visual_style: string
-          settings: Json
         }
         Insert: {
           created_at?: string
@@ -831,13 +943,13 @@ export type Database = {
           id?: string
           idea?: string | null
           mode?: string
+          settings?: Json
           status?: string
           thumbnail_url?: string | null
           title?: string
           updated_at?: string
           user_id: string
           visual_style?: string
-          settings?: Json
         }
         Update: {
           created_at?: string
@@ -845,13 +957,13 @@ export type Database = {
           id?: string
           idea?: string | null
           mode?: string
+          settings?: Json
           status?: string
           thumbnail_url?: string | null
           title?: string
           updated_at?: string
           user_id?: string
           visual_style?: string
-          settings?: Json
         }
         Relationships: []
       }
@@ -1539,21 +1651,47 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      create_project_version: {
-        Args: { _label?: string | null; _project_id: string }
-        Returns: Json
+      apply_credit_transaction: {
+        Args: {
+          _amount: number
+          _description: string
+          _idempotency_key?: string
+          _kind: string
+          _user_id: string
+        }
+        Returns: number
       }
-      restore_project_version: {
-        Args: { _project_id: string; _version_id: string }
-        Returns: undefined
+      claim_generation_job_download: {
+        Args: { _job_id: string }
+        Returns: boolean
+      }
+      claim_render_job_finalization: {
+        Args: { _job_id: string }
+        Returns: string
       }
       complete_generation_job: {
         Args: { _job_id: string; _output: Json }
         Returns: undefined
       }
+      create_project_scene: {
+        Args: { _project_id: string; _title: string }
+        Returns: string
+      }
+      create_project_version: {
+        Args: { _label?: string; _project_id: string }
+        Returns: Json
+      }
+      delete_project_scene: {
+        Args: { _project_id: string; _scene_id: string }
+        Returns: boolean
+      }
       fail_generation_job: {
         Args: { _error: string; _job_id: string }
         Returns: undefined
+      }
+      fail_generation_job_checked: {
+        Args: { _error: string; _job_id: string }
+        Returns: string
       }
       has_role: {
         Args: {
@@ -1562,41 +1700,33 @@ export type Database = {
         }
         Returns: boolean
       }
-      owns_project: { Args: { _project_id: string }; Returns: boolean }
-      start_generation_job: {
-        Args: { _input: Json; _project_id: string; _task_slug: string }
-        Returns: string
-      }
-      record_project_share_password_failure: {
-        Args: { _share_id: string }
-        Returns: { failed_attempts: number; locked_until: string | null }[]
-      }
       move_project_scene: {
         Args: { _direction: number; _project_id: string; _scene_id: string }
         Returns: boolean
       }
-      create_project_scene: {
-        Args: { _project_id: string; _title: string }
-        Returns: string
-      }
-      claim_render_job_finalization: {
-        Args: { _job_id: string }
-        Returns: string
-      }
-      rebuild_project_timeline: {
-        Args: { _project_id: string }
-        Returns: Json
+      owns_project: { Args: { _project_id: string }; Returns: boolean }
+      rebuild_project_timeline: { Args: { _project_id: string }; Returns: Json }
+      record_project_share_password_failure: {
+        Args: { _share_id: string }
+        Returns: {
+          failed_attempts: number
+          locked_until: string
+        }[]
       }
       regenerate_project_captions: {
         Args: { _project_id: string }
         Returns: Json
       }
-      delete_project_scene: {
-        Args: { _project_id: string; _scene_id: string }
-        Returns: boolean
+      replace_project_scenes: {
+        Args: { _project_id: string; _scenes: Json }
+        Returns: number
       }
-      fail_generation_job_checked: {
-        Args: { _error: string; _job_id: string }
+      restore_project_version: {
+        Args: { _project_id: string; _version_id: string }
+        Returns: undefined
+      }
+      start_generation_job: {
+        Args: { _input: Json; _project_id: string; _task_slug: string }
         Returns: string
       }
     }

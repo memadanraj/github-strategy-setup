@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedStudioRouteRouteImport } from './routes/_authenticated/_studio/route'
+import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as YoutubeCallbackRouteImport } from './routes/youtube.callback'
 import { Route as AuthenticatedStudioAdminRouteImport } from './routes/_authenticated/_studio/admin'
 import { Route as AuthenticatedStudioDashboardRouteImport } from './routes/_authenticated/_studio/dashboard'
@@ -21,7 +22,6 @@ import { Route as AuthenticatedStudioSettingsRouteImport } from './routes/_authe
 import { Route as AuthenticatedStudioProjectsIndexRouteImport } from './routes/_authenticated/_studio/projects.index'
 import { Route as AuthenticatedStudioProjectsProjectIdRouteImport } from './routes/_authenticated/_studio/projects.$projectId'
 import { Route as ApiPublicPaddleWebhookRouteImport } from './routes/api/public/paddle.webhook'
-import { Route as ShareTokenRouteImport } from './routes/share.$token'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -47,6 +47,11 @@ const AuthenticatedStudioRouteRoute =
     id: '/_studio',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const YoutubeCallbackRoute = YoutubeCallbackRouteImport.update({
   id: '/youtube/callback',
   path: '/youtube/callback',
@@ -87,36 +92,31 @@ const ApiPublicPaddleWebhookRoute = ApiPublicPaddleWebhookRouteImport.update({
   path: '/api/public/paddle/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ShareTokenRoute = ShareTokenRouteImport.update({
-  id: '/share/$token',
-  path: '/share/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/share/$token': typeof ShareTokenRoute
   '/youtube/callback': typeof YoutubeCallbackRoute
   '/admin': typeof AuthenticatedStudioAdminRoute
   '/dashboard': typeof AuthenticatedStudioDashboardRoute
   '/settings': typeof AuthenticatedStudioSettingsRoute
   '/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
   '/api/public/paddle/webhook': typeof ApiPublicPaddleWebhookRoute
-  '/share/$token': typeof ShareTokenRoute
   '/projects/': typeof AuthenticatedStudioProjectsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/share/$token': typeof ShareTokenRoute
   '/youtube/callback': typeof YoutubeCallbackRoute
   '/admin': typeof AuthenticatedStudioAdminRoute
   '/dashboard': typeof AuthenticatedStudioDashboardRoute
   '/settings': typeof AuthenticatedStudioSettingsRoute
   '/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
   '/api/public/paddle/webhook': typeof ApiPublicPaddleWebhookRoute
-  '/share/$token': typeof ShareTokenRoute
   '/projects': typeof AuthenticatedStudioProjectsIndexRoute
 }
 export interface FileRoutesById {
@@ -126,13 +126,13 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/_studio': typeof AuthenticatedStudioRouteRouteWithChildren
+  '/share/$token': typeof ShareTokenRoute
   '/youtube/callback': typeof YoutubeCallbackRoute
   '/_authenticated/_studio/admin': typeof AuthenticatedStudioAdminRoute
   '/_authenticated/_studio/dashboard': typeof AuthenticatedStudioDashboardRoute
   '/_authenticated/_studio/settings': typeof AuthenticatedStudioSettingsRoute
   '/_authenticated/_studio/projects/$projectId': typeof AuthenticatedStudioProjectsProjectIdRoute
   '/api/public/paddle/webhook': typeof ApiPublicPaddleWebhookRoute
-  '/share/$token': typeof ShareTokenRoute
   '/_authenticated/_studio/projects/': typeof AuthenticatedStudioProjectsIndexRoute
 }
 export interface FileRouteTypes {
@@ -141,26 +141,26 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/reset-password'
+    | '/share/$token'
     | '/youtube/callback'
     | '/admin'
     | '/dashboard'
     | '/settings'
     | '/projects/$projectId'
     | '/api/public/paddle/webhook'
-    | '/share/$token'
     | '/projects/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/reset-password'
+    | '/share/$token'
     | '/youtube/callback'
     | '/admin'
     | '/dashboard'
     | '/settings'
     | '/projects/$projectId'
     | '/api/public/paddle/webhook'
-    | '/share/$token'
     | '/projects'
   id:
     | '__root__'
@@ -169,13 +169,13 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/_authenticated/_studio'
+    | '/share/$token'
     | '/youtube/callback'
     | '/_authenticated/_studio/admin'
     | '/_authenticated/_studio/dashboard'
     | '/_authenticated/_studio/settings'
     | '/_authenticated/_studio/projects/$projectId'
     | '/api/public/paddle/webhook'
-    | '/share/$token'
     | '/_authenticated/_studio/projects/'
   fileRoutesById: FileRoutesById
 }
@@ -184,9 +184,9 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ShareTokenRoute: typeof ShareTokenRoute
   YoutubeCallbackRoute: typeof YoutubeCallbackRoute
   ApiPublicPaddleWebhookRoute: typeof ApiPublicPaddleWebhookRoute
-  ShareTokenRoute: typeof ShareTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -225,6 +225,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedStudioRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/youtube/callback': {
       id: '/youtube/callback'
@@ -275,13 +282,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPaddleWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/share/$token': {
-      id: '/share/$token'
-      path: '/share/$token'
-      fullPath: '/share/$token'
-      preLoaderRoute: typeof ShareTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -325,9 +325,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ShareTokenRoute: ShareTokenRoute,
   YoutubeCallbackRoute: YoutubeCallbackRoute,
   ApiPublicPaddleWebhookRoute: ApiPublicPaddleWebhookRoute,
-  ShareTokenRoute: ShareTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
