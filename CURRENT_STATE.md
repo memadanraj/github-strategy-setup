@@ -64,5 +64,14 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - Image generation and asynchronous video-clip persistence now check the asset insert, scene attachment, and job-completion writes instead of ignoring database errors.
 - On a confirmed failed job, media cleanup is attempted and cleanup failures are surfaced. If the settlement call itself cannot be confirmed, media is preserved to avoid deleting a result that may already be complete; the user is told that credit state needs reconciliation instead of being falsely told a refund happened.
 - New migration `0021_checked_visual_job_settlement.sql` adds a service-role-only RPC that returns the observed terminal state and refunds a reservation in the same transaction as marking the job failed.
-- GitHub Actions passed lint, typecheck, tests (**20 test files passed**) and the production build on commit `d20f32f5dbac1152acfb3baca669de8246fc8df7`.
+- GitHub Actions passed lint, typecheck, tests (**21 test files passed**) and the production build on commit `e03856ebfff833b3332fda18a9ae4cd256fba050`.
 - The staging database has not been connected from this environment. Migration `0021`, storage cleanup behavior, and provider race/retry cases still require staging verification.
+
+
+## Update — audio job settlement and media consistency (October 12, 2026)
+
+- Voiceover, voice preview, voice cloning, and music generation now check database writes and completion results rather than silently accepting failed asset/track/scene associations.
+- These paths use `src/lib/audio-job-settlement.ts`, which calls the checked failure/refund RPC. User-facing errors do not claim a refund unless the database confirms the failed terminal state and reservation refund.
+- Voiceover cleanup attempts to restore the previous scene-audio association before removing new rows; preview files use unique storage paths; music and voiceover cleanup checks row deletion and file removal. If database cleanup fails, the shared cleanup helper preserves media files that may still be referenced.
+- Added `src/test/audio-job-settlement.test.ts` for completion RPC failures, confirmed refunds, unknown settlement, and already-complete handling. Latest CI run passes with **21 test files**.
+- The code is still branch-only. Audio provider, storage, and rollback behavior require staging end-to-end tests; provider-created remote voice clones cannot always be compensated by local database cleanup alone.

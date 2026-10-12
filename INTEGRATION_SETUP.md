@@ -137,3 +137,10 @@ The automated workflow runs the static checks, unit/component tests, and product
 
 
 For migration `0021_checked_visual_job_settlement.sql`, verify the `generation_jobs`, `generation_job_events`, `profiles`, and `credit_transactions` schema matches the function's expectations in staging. Test a normal failure/refund, no-reservation failure, duplicate failure call, a completion-vs-failure race, and refund rollback before promoting. Keep the RPC executable only by `service_role`.
+
+
+## Audio generation settlement and cleanup
+
+The active audio routes are `generateSceneVoiceover`, `previewVoice`, `cloneVoice`, and `generateMusicTrack`. They use `src/lib/audio-job-settlement.ts` and the service-role-only `fail_generation_job_checked` RPC from migration `0021_checked_visual_job_settlement.sql`.
+
+Before production, run each route against staging with the provider configured and test: storage upload failure; asset insert timeout; voiceover/track insert failure; scene-audio upsert failure; signed URL failure; completion RPC error after a possible commit; settlement RPC outage; DB row cleanup failure; storage removal failure; duplicate requests; and a retry after an already-complete or already-failed job. Confirm that reserved credits are refunded exactly once and that no scene references missing media. This workflow does not connect to staging or prove those external cases.

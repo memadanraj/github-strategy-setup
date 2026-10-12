@@ -89,7 +89,7 @@ This checklist follows the uploaded plan's order. “Exists” means code is pre
 
 ### Current-head evidence
 
-- GitHub Actions for commit `d20f32f5dbac1152acfb3baca669de8246fc8df7` passed lint, TypeScript typecheck, unit/component tests, and production build (20 test files passed).
+- GitHub Actions for commit `e03856ebfff833b3332fda18a9ae4cd256fba050` passed lint, TypeScript typecheck, unit/component tests, and production build (21 test files passed).
 - New-project and writing-panel failure-path tests pass in CI; scene-breakdown normalization tests pass in CI. The SQL migration itself still requires application and integration verification against a staging Supabase database.
 - No staging Supabase database, live AI provider, render service, or Paddle sandbox has been exercised from this environment.
 
@@ -119,3 +119,14 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 
 - Media persistence now uses a shared checked-settlement helper. Image/clip paths only report a confirmed refund after the database reports the job failed with a reservation refund (or an already-failed terminal state); settlement uncertainty is explicitly surfaced for reconciliation.
 - Migration `0021_checked_visual_job_settlement.sql` provides a privileged RPC that checks/locks the job, marks it failed, logs the event, restores reserved credits, and returns an explicit state. It is not applied to staging from this environment.
+
+
+## Audio generation hardening — October 12, 2026
+
+- Extracted `src/lib/audio-job-settlement.ts` so the audio routes share one tested checked-completion / checked-failure contract.
+- Voiceover verifies the audio file upload, asset row, voiceover row, prior scene-audio settings read, scene-audio attachment, signed playback URL, and completion RPC. If a later step fails, it attempts conditional rollback of the new association and new records before removing the upload.
+- Voice preview uses unique storage paths, prepares playback before completion, and only reports a charged success after completion is confirmed or the job is confirmed already complete.
+- Music verifies the asset and track rows and prepares playback before completion; failed persistence triggers cleanup with errors surfaced.
+- Voice cloning checks the local clone/voice record writes and completion. If the provider created the clone but later local persistence fails, the response warns that the provider-side clone may need manual review.
+- Five helper tests cover success, completion failure, refund confirmation, settlement uncertainty, and preserving results for already-complete jobs. GitHub Actions passed on `e03856ebfff833b3332fda18a9ae4cd256fba050`.
+- Remaining risk: these are compensating actions across multiple database/storage operations, not one atomic transaction. Exercise all failure points and concurrent requests against staging before production.

@@ -6,7 +6,7 @@ The repository contains baseline implementations for authentication, dashboard, 
 
 - [x] Phase 0 — repository audit and baseline inventory
 - [ ] Phase 1 — foundation: auth, ownership, persistence, error recovery (partial; CI and persistence-failure tests exist; staging auth/RLS verification remains)
-- [ ] Phase 2 — projects/scenes/assets CRUD and recovery tests (transactional scene replacement, version recovery, reordering/create/delete, asset validation, and checked image/clip settlement implemented; SQL/RLS staging integration tests remain)
+- [ ] Phase 2 — projects/scenes/assets CRUD and recovery tests (transactional scene replacement, version recovery, reordering/create/delete, asset validation, and checked image/clip/audio settlement implemented; SQL/RLS staging integration tests remain)
 - [ ] Phase 3 — central jobs: atomic reservation, async provider lifecycle, idempotent completion/refund (partial; checked visual-job failure/refund RPC and client tests added; staging concurrency/migration tests remain)
 - [ ] Phase 4 — provider contracts, retries, timeouts, and structured errors
 - [ ] Phase 5 — creation wizard and persisted production plan (implemented on branch; staging migration verification remains)
@@ -24,3 +24,8 @@ The repository contains baseline implementations for authentication, dashboard, 
 - [ ] Final gate — full end-to-end MVP tests and staging sign-off
 
 Do not mark a phase complete until its code, persistence, authorization, failure paths, and relevant tests pass. External-provider and staging-only checks must be marked separately rather than implied to pass in CI.
+
+
+### Audio and media consistency update (October 12, 2026)
+
+Audio routes now check completion/settlement RPC errors and avoid asserting a refund without confirmation. Voiceover, preview and music persistence include compensating cleanup paths; voice cloning surfaces possible provider-side orphan state. Unit tests cover the checked settlement wrapper, but live provider and storage interactions remain a staging release gate.
