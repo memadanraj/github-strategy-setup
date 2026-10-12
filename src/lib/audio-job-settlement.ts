@@ -60,3 +60,17 @@ export async function failAudioJob(
     return data as VisualJobFailureState;
   }, message, cleanup);
 }
+
+export async function restoreSceneAudioVoiceover(options: {
+  currentVoiceoverId: string | null;
+  createdVoiceoverId: string;
+  previousVoiceoverId: string | null;
+  updateVoiceoverId: (voiceoverId: string | null) => PromiseLike<{ error: { message: string } | null }>;
+}): Promise<"restored" | "changed-elsewhere"> {
+  // Never overwrite a concurrent voiceover change, and never replace unrelated
+  // scene_audio fields (music, levels, fades, ducking, or sound effects).
+  if (options.currentVoiceoverId !== options.createdVoiceoverId) return "changed-elsewhere";
+  const { error } = await options.updateVoiceoverId(options.previousVoiceoverId);
+  if (error) throw new Error("Could not restore the previous scene voiceover.");
+  return "restored";
+}

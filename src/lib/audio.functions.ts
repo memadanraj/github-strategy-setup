@@ -4,7 +4,7 @@ import {createHash} from "node:crypto";
 import {requireSupabaseAuth} from "@/integrations/supabase/auth-middleware";
 import {supabaseAdmin} from "@/integrations/supabase/client.server";
 import {voiceProvider,musicProvider} from "./audio.providers.server";
-import {completeAudioJob,failAudioJob,type AudioJobFailureCleanup} from "./audio-job-settlement";
+import {completeAudioJob,failAudioJob,type AudioJobFailureCleanup , restoreSceneAudioVoiceover } from "./audio-job-settlement";
 
 const db:any=supabaseAdmin;
 
@@ -119,13 +119,21 @@ export const generateSceneVoiceover=createServerFn({method:"POST"}).middleware([
      else voiceoverIdForCleanup=lookup.data?.id;
     }
     if(sceneAudioUpsertAttempted&&previousSceneAudioLoaded&&voiceoverIdForCleanup){
-     const currentAudio=await db.from("scene_audio").select("*").eq("project_id",data.projectId).eq("scene_id",data.sceneId).maybeSingle();
+     const currentAudio=await db.from("scene_audio").select("voiceover_id").eq("project_id",data.projectId).eq("scene_id",data.sceneId).maybeSingle();
      if(currentAudio.error)problems.push("scene audio lookup");
-     else if(currentAudio.data?.voiceover_id===voiceoverIdForCleanup){
-      const restored=previousSceneAudio
-       ? await db.from("scene_audio").upsert(previousSceneAudio,{onConflict:"scene_id"})
-       : await db.from("scene_audio").delete().eq("id",currentAudio.data.id).eq("voiceover_id",voiceoverIdForCleanup);
-      if(restored.error)problems.push("scene audio restore");
+     else {
+      try {
+       await restoreSceneAudioVoiceover({
+        currentVoiceoverId:currentAudio.data?.voiceover_id??null,
+        createdVoiceoverId:voiceoverIdForCleanup,
+        previousVoiceoverId:previousSceneAudio?.voiceover_id??null,
+        updateVoiceoverId:async(previousVoiceoverId)=>await db.from("scene_audio")
+         .update({voiceover_id:previousVoiceoverId,updated_at:new Date().toISOString()})
+         .eq("project_id",data.projectId)
+         .eq("scene_id",data.sceneId)
+         .eq("voiceover_id",voiceoverIdForCleanup)
+       });
+      } catch { problems.push("scene audio restore"); }
      }
     }
     if(voiceoverInsertAttempted){
