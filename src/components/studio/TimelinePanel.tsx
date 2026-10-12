@@ -305,7 +305,7 @@ function CaptionEditor({captions,selected,onSelect,onUpdate}:{captions:any[];sel
   </section>;
 }
 
-function Inspector({clip,caption,settings,onClipUpdate,onClipDelete,onCaptionUpdate,onSettings}:{clip:any;caption:any;settings:any;onClipUpdate:(id:string,p:any)=>Promise<boolean>;onClipDelete:(id:string)=>void;onCaptionUpdate:(id:string,p:any)=>Promise<boolean>;onSettings:(p:any)=>void}) {
+function Inspector({clip,caption,settings,onClipUpdate,onClipDelete,onCaptionUpdate,onSettings}:{clip:any;caption:any;settings:any;onClipUpdate:(id:string,p:any)=>Promise<boolean>;onClipDelete:(id:string)=>void;onCaptionUpdate:(id:string,p:any)=>Promise<boolean>;onSettings:(p:any)=>Promise<boolean>}) {
   if (caption) return <section className="rounded-2xl border border-border bg-surface p-4"><p className="font-mono text-xs text-muted-foreground">CAPTION INSPECTOR</p><h3 className="mt-1 font-semibold">Cue styling</h3><div className="mt-4 grid gap-2"><select value={caption.position} onChange={e=>onCaptionUpdate(caption.id,{position:e.target.value})} className="h-9 rounded-md border border-border bg-surface px-2 text-sm"><option value="bottom">Bottom</option><option value="center">Center</option><option value="top">Top</option></select><p className="text-xs text-muted-foreground">Caption text and timing remain editable in the cue list.</p></div></section>;
   if (!clip) return <TimelineSettingsForm settings={settings} onSave={onSettings} />;
   return <ClipInspectorForm clip={clip} onSave={onClipUpdate} onDelete={onClipDelete} />;
