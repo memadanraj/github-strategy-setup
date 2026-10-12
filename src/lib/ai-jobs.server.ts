@@ -37,8 +37,14 @@ async function failJobChecked(jobId: string, message: string): Promise<Generatio
 }
 
 function failureResult<T>(message: string, state: GenerationJobFailureState): TaskResult<T> {
-  if (state === "failed_refunded" || state === "already_failed") {
+  if (state === "failed_refunded") {
     return { ok: false, error: `${message} Your credits were refunded.` };
+  }
+  if (state === "already_failed") {
+    return {
+      ok: false,
+      error: `${message} The job was already marked failed, but this response could not confirm its refund status. Check your credit history or contact support.`,
+    };
   }
   if (state === "failed_without_reservation") {
     return { ok: false, error: `${message} The job failed, but no reserved credits were available to refund.` };
@@ -62,6 +68,8 @@ export async function runAiTask<T, R>(opts: {
   instructions: string;
   prompt: string;
   persist: (result: T) => Promise<R>;
+  /** Optional compensation for persisted output if checked settlement confirms failure. */
+  rollback?: (value: R) => Promise<void>;
 }): Promise<TaskResult<R>> {
   const { supabase } = opts;
   const { data: task, error: taskError } = await supabase
@@ -146,6 +154,27 @@ export async function runAiTask<T, R>(opts: {
     }
 
     console.error(`${opts.taskSlug} failed with job state ${state}`);
-    return failureResult<R>(message, state);
+    let cleanupFailed = false;
+    if (
+      persistenceFinished &&
+      opts.rollback &&
+      (state === "failed_refunded" || state === "failed_without_reservation" || state === "already_failed")
+    ) {
+      try {
+        await opts.rollback(persistedValue as R);
+      } catch (cleanupError) {
+        cleanupFailed = true;
+        console.error(`${opts.taskSlug} persisted-output rollback needs reconciliation`, cleanupError);
+      }
+    }
+
+    const result = failureResult<R>(message, state);
+    if (!result.ok && cleanupFailed) {
+      return {
+        ok: false,
+        error: `${result.error} Generated output cleanup failed; manual reconciliation is required.`,
+      };
+    }
+    return result;
   }
 }

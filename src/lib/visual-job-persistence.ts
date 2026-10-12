@@ -102,8 +102,10 @@ export async function settleVisualJobFailure(
   }
 
   let settlementMessage: string;
-  if (state === "failed_refunded" || state === "already_failed") {
+  if (state === "failed_refunded") {
     settlementMessage = "Your credits were refunded.";
+  } else if (state === "already_failed") {
+    settlementMessage = "The job was already marked failed, but this response could not confirm its refund status. Check your credit history or contact support.";
   } else if (state === "failed_without_reservation") {
     settlementMessage = "The job was marked failed, but no reserved credits were available to refund.";
   } else if (state === "already_complete") {
