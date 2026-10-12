@@ -23,9 +23,88 @@ export type VisualPersistenceResult<T extends PreparedVisual> =
   | { ok: true; output: T; assetId: string }
   | { ok: false; error: string };
 
+type FailureCleanup = {
+  completionMayHaveSucceeded?: boolean;
+  cleanupAsset?: () => Promise<void>;
+  cleanupUpload?: () => Promise<void>;
+};
+
+export type VisualFailureOutcome = {
+  state: VisualJobFailureState | null;
+  completed: boolean;
+  error: string;
+};
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
   return "AI media generation failed.";
+}
+
+export async function settleVisualJobFailure(
+  failJob: (message: string) => Promise<VisualJobFailureState>,
+  message: string,
+  cleanup: FailureCleanup = {},
+): Promise<VisualFailureOutcome> {
+  let state: VisualJobFailureState;
+
+  try {
+    state = await failJob(message.slice(0, 500));
+  } catch {
+    // A network failure during settlement leaves the final job state unknown.
+    // Preserve media: deleting it could break a completion that actually committed.
+    return {
+      state: null,
+      completed: false,
+      error: message + " Job settlement could not be confirmed; automatic media cleanup was deferred and credit state needs reconciliation.",
+    };
+  }
+
+  if (state === "already_complete" && cleanup.completionMayHaveSucceeded) {
+    return { state, completed: true, error: "" };
+  }
+
+  const cleanupIsSafe = (
+    state === "failed_refunded" ||
+    state === "failed_without_reservation" ||
+    state === "already_failed" ||
+    state === "not_found"
+  );
+  const cleanupFailures: string[] = [];
+
+  if (cleanupIsSafe && cleanup.cleanupAsset) {
+    try {
+      await cleanup.cleanupAsset();
+    } catch {
+      cleanupFailures.push("asset record");
+    }
+  }
+
+  if (cleanupIsSafe && cleanup.cleanupUpload) {
+    try {
+      await cleanup.cleanupUpload();
+    } catch {
+      cleanupFailures.push("uploaded file");
+    }
+  }
+
+  let settlementMessage: string;
+  if (state === "failed_refunded" || state === "already_failed") {
+    settlementMessage = "Your credits were refunded.";
+  } else if (state === "failed_without_reservation") {
+    settlementMessage = "The job was marked failed, but no reserved credits were available to refund.";
+  } else if (state === "already_complete") {
+    settlementMessage = "The job is already complete, so credit/refund status was not changed.";
+  } else if (state === "not_found") {
+    settlementMessage = "The job record was not found, so a credit refund could not be confirmed.";
+  } else {
+    settlementMessage = "The job state is not active; credit/refund status could not be confirmed.";
+  }
+
+  const cleanupMessage = cleanupFailures.length
+    ? " Cleanup failed for " + cleanupFailures.join(" and ") + "; manual cleanup is required."
+    : "";
+
+  return { state, completed: false, error: message + " " + settlementMessage + cleanupMessage };
 }
 
 export async function persistGeneratedVisual<T extends PreparedVisual>(
@@ -56,71 +135,21 @@ export async function persistGeneratedVisual<T extends PreparedVisual>(
     return { ok: true, output, assetId };
   } catch (cause) {
     const message = errorMessage(cause);
-    let failureState: VisualJobFailureState;
+    const outcome = await settleVisualJobFailure(operations.failJob, message, {
+      completionMayHaveSucceeded: completionStarted && sceneAttached && Boolean(assetId) && Boolean(output),
+      cleanupAsset: output && assetRegistrationAttempted
+        ? () => operations.cleanupAsset(output as T)
+        : undefined,
+      cleanupUpload: output && uploadAttempted
+        ? () => operations.cleanupUpload(output as T)
+        : undefined,
+    });
 
-    try {
-      failureState = await operations.failJob(message);
-    } catch {
-      // A network failure during settlement leaves the final job state unknown.
-      // Preserve media: deleting it could break a completion that actually committed.
-      return {
-        ok: false,
-        error: message + " Job settlement could not be confirmed; automatic media cleanup was deferred and credit state needs reconciliation.",
-      };
-    }
-
-    if (
-      failureState === "already_complete" &&
-      completionStarted &&
-      sceneAttached &&
-      assetId &&
-      output
-    ) {
+    if (outcome.completed && output && assetId) {
       // The completion RPC may have committed even if its response was lost.
       return { ok: true, output, assetId };
     }
 
-    const cleanupIsSafe = (
-      failureState === "failed_refunded" ||
-      failureState === "failed_without_reservation" ||
-      failureState === "already_failed" ||
-      failureState === "not_found"
-    );
-    const cleanupFailures: string[] = [];
-
-    if (cleanupIsSafe && output) {
-      if (assetRegistrationAttempted) {
-        try {
-          await operations.cleanupAsset(output);
-        } catch {
-          cleanupFailures.push("asset record");
-        }
-      }
-      if (uploadAttempted) {
-        try {
-          await operations.cleanupUpload(output);
-        } catch {
-          cleanupFailures.push("uploaded file");
-        }
-      }
-    }
-
-    let settlementMessage: string;
-    if (failureState === "failed_refunded" || failureState === "already_failed") {
-      settlementMessage = "Your credits were refunded.";
-    } else if (failureState === "failed_without_reservation") {
-      settlementMessage = "The job was marked failed, but no reserved credits were available to refund.";
-    } else if (failureState === "already_complete") {
-      settlementMessage = "The job is already complete, so credit/refund status was not changed.";
-    } else if (failureState === "not_found") {
-      settlementMessage = "The job record was not found, so a credit refund could not be confirmed.";
-    } else {
-      settlementMessage = "The job state is not active; credit/refund status could not be confirmed.";
-    }
-
-    const cleanupMessage = cleanupFailures.length
-      ? " Cleanup failed for " + cleanupFailures.join(" and ") + "; manual cleanup is required."
-      : "";
-    return { ok: false, error: message + " " + settlementMessage + cleanupMessage };
+    return { ok: false, error: outcome.error };
   }
 }
