@@ -1,28 +1,16 @@
 import {createServerFn} from "@tanstack/react-start";
+async function failJob(id:string,msg:string,cleanup:AudioJobFailureCleanup={}) {
+ return failAudioJob((name,args)=>db.rpc(name,args),id,msg,cleanup);
+}
+async function doneJob(id:string,out:any) {
+ return completeAudioJob((name,args)=>db.rpc(name,args),id,out);
+}
 import {z} from "zod";
 import {createHash} from "node:crypto";
 import {requireSupabaseAuth} from "@/integrations/supabase/auth-middleware";
 import {supabaseAdmin} from "@/integrations/supabase/client.server";
 import {voiceProvider,musicProvider} from "./audio.providers.server";
-import { settleVisualJobFailure, type VisualJobFailureState } from "./visual-job-persistence";
-const db:any=supabaseAdmin;
-async function url(path:string){const {data,error}=await db.storage.from("project-assets").createSignedUrl(path,900);if(error)throw new Error("Playback URL unavailable");return data.signedUrl}
-async function job(s:any,slug:string,projectId:string,input:any){const r=await s.rpc("start_generation_job",{_task_slug:slug,_project_id:projectId,_input:input});if(r.error||!r.data)throw new Error(r.error?.message||"Couldn't start generation");return r.data as string}
-type AudioFailureCleanup = {
- completionMayHaveSucceeded?: boolean;
- cleanupAsset?: () => Promise<void>;
- cleanupUpload?: () => Promise<void>;
-};
-async function failJob(id:string,msg:string,cleanup:AudioFailureCleanup={}) {
- return settleVisualJobFailure(async(message:string):Promise<VisualJobFailureState>=>{
-  const {data,error}=await db.rpc("fail_generation_job_checked",{_job_id:id,_error:message.slice(0,500)});
-  if(error||typeof data!=="string")throw new Error("Could not confirm audio job settlement.");
-  const allowed:VisualJobFailureState[]=["failed_refunded","failed_without_reservation","already_failed","already_complete","not_found","not_active"];
-  if(!allowed.includes(data as VisualJobFailureState))throw new Error("Audio job settlement returned an unknown state.");
-  return data as VisualJobFailureState;
- },msg,cleanup);
-}
-async function doneJob(id:string,out:any){
+import { completeAudioJob, failAudioJob, type AudioJobFailureCleanup } from "./audio-job-settlement";
  const {error}=await db.rpc("complete_generation_job",{_job_id:id,_output:out});
  if(error)throw new Error("Could not finalize the audio generation job.");
 }
