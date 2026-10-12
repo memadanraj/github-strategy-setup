@@ -2,7 +2,7 @@
 
 This is an evidence-based phase tracker for the master plan. A UI control or source file alone is not proof a feature is complete. `COMPLETE` should be used only after persistence, security, error paths, and relevant tests pass.
 
-**Working branch:** `hardening/phase-6-render-export-integrity`  
+**Working branch:** `hardening/phase-11-clip-mp4-integrity`  
 **Target:** stacked draft PR; no direct changes to `main`  
 **Status date:** 2026-10-12
 
@@ -14,7 +14,7 @@ This is an evidence-based phase tracker for the master plan. A UI control or sou
 | 3. Central jobs | PARTIAL / TEST | Async clip start validates provider-job-ID persistence; clip status polling retries transient network/timeouts until the global deadline. Visual jobs and synchronous AI tasks use `fail_generation_job_checked`; lost completion responses are resolved against terminal DB state, and refunds are reported only for confirmed refunded terminal states. Unit tests cover refund/unknown/no-reservation/already-complete cases. Migrations `0013` and `0021`, concurrency, and staging tests remain. |
 | 4. Provider abstraction | PARTIAL / TEST | Added bounded visual-provider HTTP helpers: image generation timeout 120s, video start 45s, polling 20s; metadata JSON capped at 512 KiB and image JSON capped at 44 MiB. Network/timeouts are safe typed failures; transient poll failures retry. Tests cover timeout/network failures, response-size limits and malformed JSON. Shared adapters/retries across all providers and staging behavior remain. |
 | 5. Script generation | EXISTING / TEST | Research/hooks/script/scene drafting flows exist. Mainline operations still execute synchronously and structured generation/persistence needs failure tests. |
-| 6. Video clip generation | PARTIAL / TEST | Start/poll requests are bounded, transient poll network/timeouts are retried, provider status JSON has a size limit, and the overall job has a 15-minute deadline. Downloader bounds bytes/time, validates HTTPS/redirects/content type and does not forward gateway secrets to third-party hosts. Provider start/poll, cancel, retries and actual result playback still need staging validation. |
+| 6. Video clip generation | PARTIAL / TEST | Start/poll requests are bounded, transient poll network/timeouts are retried, provider status JSON has a size limit, and the overall job has a 15-minute deadline. Downloader bounds bytes/time, validates HTTPS/redirects/content type, strips credentials on cross-origin redirects, and does not forward gateway secrets to third-party hosts. Generated clips must also pass MP4-compatible MIME and ISO BMFF box-structure validation under a 128 MiB limit before asset/scene/job completion; invalid or stale output URLs fall back to the authenticated provider-content endpoint. Provider start/poll, cancel, retries, codec compatibility, and actual playback still need staging validation. |
 | 7. Voice generation | EXISTING / TEST | Voice provider code and UI exist, but live verification requires `ELEVENLABS_API_KEY` and/or supported voice-provider credentials. |
 | 8. Captions | EXISTING / TEST | Caption/transcription model exists; timing, edit, export-format and rendered-caption acceptance tests remain. |
 | 9. Basic editor/timeline | PARTIAL / TEST | Client and DB guardrails cap timeline times at 24 hours. Caption text/time and clip properties now use local drafts plus explicit save actions rather than issuing writes on every keystroke. Unit/component tests cover atomic form saves and retaining edits after a failed save. Migration `0024` still needs a staging existing-row audit and constraint validation; drag/trim/split/undo/redo remain open. |
@@ -47,6 +47,7 @@ Do not claim production readiness until a staging user can sign up, create a pro
 - Added a pure provider-response contract for video job IDs, status, output URL variants, and error messages, with unit tests for valid, malformed, missing, and alternate response shapes.
 - Async clip creation now checks the database write for the external provider job ID. If persistence fails, the existing failure/refund path runs instead of returning a job that can only spin until timeout.
 - Provider HTTP tests cover timeout/network mapping, timeout bounds, limited chunked response reads, oversized `Content-Length`, malformed JSON and empty responses. Synchronous AI settlement tests cover lost completion responses and checked refund states. Code commit `3f89c3a3e830fcef99c0c0ce6426ac597ccec6bf` passed CI; live database/provider behavior remains unverified.
+- Generated clip persistence now validates MIME and MP4 container structure before uploading or registering media. Invalid output URLs are discarded and the authenticated provider-content endpoint is tried before the job enters checked failure/refund settlement. Commit `39ea7296a822d7b3869494b35e72cdf6e4d888f0` passed locked dependency install, lint, typecheck, unit/component tests, and production build; real provider media/codec playback remains a staging gate.
 
 
 ## Master plan — exact implementation order and gates

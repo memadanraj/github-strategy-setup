@@ -24,7 +24,7 @@ This file distinguishes **code present**, **automated checks**, and **live/stagi
 | Scene CRUD/order | Implemented in branch | Create/delete/reorder use transactional RPCs; migrations `0019` and `0020` need staging RLS/concurrency verification |
 | Project versions | Implemented in branch | Atomic snapshots/restores via `0017`; staging restore and asset-link checks remain |
 | Asset uploads | Implemented in branch | File validation and cleanup paths are unit-tested; storage policies, orphan cleanup, and cross-user isolation need staging tests |
-| Async video clips | Partial | Provider job IDs/status/output are normalized; media download is bounded and hardened. Live provider timeout/retry/cancel/asset linking remains untested |
+| Async video clips | Partial | Provider job IDs/status/output are normalized; download is bounded; media MIME and MP4 box structure are validated before storage; invalid output URLs fall back to the authenticated content endpoint. Live provider timeout/retry/cancel/asset linking, codec compatibility and playback remain untested |
 | Voice/music/captions/timeline | Existing UI/code | Live provider output, timed captions, editor persistence/undo/redo need acceptance tests |
 | Rendering and exports | Partial | Provider adapter and failure tests exist; real MP4 render/download/playback and retry tests remain |
 | Share links | Implemented in branch | Hashed tokens, optional password, expiry/revoke, lockout, and short-lived signed export URLs; migration `0018` and live access controls need staging checks |
@@ -109,3 +109,12 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - The structural checks require file-type, movie and non-empty media-data boxes; truncated/oversized boxes and malformed/non-MP4 responses are rejected.
 - Invalid container output becomes a failed render, rather than a ready export. CI passed lint, typecheck, **29 test files** (7 MP4 validation tests), and production build on code commit `611893c00bc9826d24d31581e58552a592d8d664`.
 - This is not a codec-level validation or an end-to-end playback result. A real renderer, storage, export-download and browser playback test is still required in staging.
+
+
+## Update — generated clip MP4 integrity (October 12, 2026)
+
+- Scene-clip downloads now preserve the provider response content type and accept only MP4 or generic binary responses for the clip path.
+- Before a generated clip is uploaded, registered as an asset, attached to a scene, or marked complete, the bytes must pass the existing ISO BMFF container checks: valid top-level box boundaries, `ftyp`, `moov`, and non-empty `mdat`; generic binary MIME does not bypass byte validation.
+- The clip path keeps a 128 MiB response limit. If the provider's returned URL is stale, invalid, non-MP4 or malformed, the code tries the authenticated provider-content endpoint; if that also fails, normal checked job-failure settlement runs rather than persisting invalid media as `.mp4`.
+- CI passed locked dependency install, lint, TypeScript typecheck, unit/component tests and production build for commit `39ea7296a822d7b3869494b35e72cdf6e4d888f0`.
+- Live AI provider output and actual playback still require staging verification; CI does not prove a real provider's codec output is playable.
