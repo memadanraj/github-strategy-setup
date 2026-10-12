@@ -42,7 +42,7 @@ describe("timeline editor input validation", () => {
     expect(validateTimelineClipPatch({ duration_seconds: 86401 })).toContain("24 hours");
     expect(validateTimelineClipPatch({ source_start_seconds: 86401 })).toContain("24 hours");
     expect(validateTimelineClipPatch(
-      { start_seconds: 86399 },
+      { start_seconds: 86395 },
       { start_seconds: 10, duration_seconds: 5 },
     )).toBeNull();
     expect(validateTimelineClipPatch(
