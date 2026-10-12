@@ -29,8 +29,11 @@ async function gatewayError(res: Response, fallback: string) {
     if (typeof json === "object" && json !== null) {
       const record = json as Record<string, unknown>;
       const error = record["error"];
-      if (typeof error === "object" && error !== null && typeof (error as Record<string, unknown>)["message"] === "string") {
-        detail = (error as Record<string, string>)["message"];
+      const providerMessage = typeof error === "object" && error !== null
+        ? (error as Record<string, unknown>)["message"]
+        : undefined;
+      if (typeof providerMessage === "string") {
+        detail = providerMessage;
       } else if (typeof record["message"] === "string") {
         detail = record["message"];
       } else if (typeof record["detail"] === "string") {
@@ -525,7 +528,11 @@ export const checkSceneClip = createServerFn({ method: "POST" })
         return fail(await gatewayError(poll, "Clip status check failed"));
       }
       const info = await readProviderJson<unknown>(poll, 512 * 1024);
-      const providerStatus = normalizeProviderVideoStatus(info.status);
+      const providerStatus = normalizeProviderVideoStatus(
+        typeof info === "object" && info !== null
+          ? (info as Record<string, unknown>)["status"]
+          : undefined,
+      );
       if (providerStatus === "failed") {
         return fail(readProviderVideoError(info) ?? "Clip generation failed.");
       }
