@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { CaptionCueEditor, ClipInspectorForm } from "@/components/studio/TimelineEditForms";
+import { CaptionCueEditor, ClipInspectorForm, TimelineSettingsForm } from "@/components/studio/TimelineEditForms";
 
 const caption = {
   id: "caption-1",
@@ -58,6 +58,30 @@ describe("timeline editing forms", () => {
       source_start_seconds: 0.5,
       volume: 0.75,
     }));
+  });
+
+  it("does not persist timeline settings until save and submits both values together", async () => {
+    const onSave = vi.fn().mockResolvedValue(true);
+    render(<TimelineSettingsForm settings={{ fps: 30, grid_seconds: 1 }} onSave={onSave} />);
+
+    fireEvent.change(screen.getByLabelText("FPS"), { target: { value: "60" } });
+    fireEvent.change(screen.getByLabelText("Grid (seconds)"), { target: { value: "0.5" } });
+    expect(onSave).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith({ fps: 60, grid_seconds: 0.5 }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save settings" })).toBeDisabled());
+  });
+
+  it("keeps timeline settings draft visible if save fails", async () => {
+    const onSave = vi.fn().mockResolvedValue(false);
+    render(<TimelineSettingsForm settings={{ fps: 30, grid_seconds: 1 }} onSave={onSave} />);
+
+    fireEvent.change(screen.getByLabelText("Grid (seconds)"), { target: { value: "2.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(screen.getByLabelText("Grid (seconds)")).toHaveValue(2.5);
+    expect(screen.getByRole("status")).toHaveTextContent("Unsaved changes");
   });
 
   it("keeps unsaved clip values available when the save fails", async () => {
