@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Play, Pause, RotateCcw, Wand2, Captions as CaptionsIcon, Scissors, Lock, Unlock, Volume2, VolumeX } from "lucide-react";
+import { Play, Pause, RotateCcw, Wand2, Captions as CaptionsIcon, Lock, Unlock, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { rebuildProjectTimeline, regenerateProjectCaptions } from "@/lib/timeline-operations";
+import { CaptionCueEditor, ClipInspectorForm } from "@/components/studio/TimelineEditForms";
 import {
   validateTimelineCaptionPatch,
   validateTimelineClipPatch,
@@ -144,21 +144,23 @@ export function TimelinePanel({ project }: { project: Project }) {
     ]);
   }
 
-  async function updateClip(id:string, patch:any) {
+  async function updateClip(id:string, patch:any): Promise<boolean> {
     const current = clips.find((clip:any) => clip.id === id) as TimelineClipTiming | undefined;
-    if (!current) { toast.error("Clip not found or no longer available."); return; }
+    if (!current) { toast.error("Clip not found or no longer available."); return false; }
     const invalid = validateTimelineClipPatch(patch, current);
-    if (invalid) { toast.error(invalid); return; }
+    if (invalid) { toast.error(invalid); return false; }
     try {
       const r = await db.from("timeline_clips")
         .update({...patch,updated_at:new Date().toISOString()})
         .eq("project_id",project.id).eq("id",id)
         .select("id").maybeSingle();
-      if (r.error) { toast.error(r.error.message); return; }
-      if (!r.data) { toast.error("Clip not found or no longer available."); return; }
+      if (r.error) { toast.error(r.error.message); return false; }
+      if (!r.data) { toast.error("Clip not found or no longer available."); return false; }
       await qc.invalidateQueries({queryKey:["timeline_clips",project.id]});
+      return true;
     } catch {
       toast.error("Could not save the clip. Check your connection and try again.");
+      return false;
     }
   }
   async function deleteClip(id:string) {
@@ -174,21 +176,23 @@ export function TimelinePanel({ project }: { project: Project }) {
       toast.error("Could not delete the clip. Check your connection and try again.");
     }
   }
-  async function updateCaption(id:string, patch:any) {
+  async function updateCaption(id:string, patch:any): Promise<boolean> {
     const current = captions.find((caption:any) => caption.id === id);
-    if (!current) { toast.error("Caption not found or no longer available."); return; }
+    if (!current) { toast.error("Caption not found or no longer available."); return false; }
     const invalid = validateTimelineCaptionPatch(patch, current);
-    if (invalid) { toast.error(invalid); return; }
+    if (invalid) { toast.error(invalid); return false; }
     try {
       const r = await db.from("captions")
         .update({...patch,updated_at:new Date().toISOString()})
         .eq("project_id",project.id).eq("id",id)
         .select("id").maybeSingle();
-      if (r.error) { toast.error(r.error.message); return; }
-      if (!r.data) { toast.error("Caption not found or no longer available."); return; }
+      if (r.error) { toast.error(r.error.message); return false; }
+      if (!r.data) { toast.error("Caption not found or no longer available."); return false; }
       await qc.invalidateQueries({queryKey:["captions",project.id]});
+      return true;
     } catch {
       toast.error("Could not save the caption. Check your connection and try again.");
+      return false;
     }
   }
   async function saveSettings(patch:any) {
@@ -283,15 +287,26 @@ function ClipBlock({clip,scale,selected,onSelect,onTime,onUpdate}:{clip:any;scal
     <span className="absolute bottom-0 left-0 right-0 h-1 bg-signal/30"/>
   </button>
 }
-function CaptionEditor({captions,selected,onSelect,onUpdate}:{captions:any[];selected:any;onSelect:(id:string)=>void;onUpdate:(id:string,p:any)=>void}) {
- return <section className="rounded-2xl border border-border bg-surface p-4"><div className="flex items-center justify-between"><div><p className="font-mono text-xs text-muted-foreground">CAPTIONS</p><h3 className="font-semibold">Caption cues</h3></div><span className="font-mono text-xs text-signal">{captions.length} CUES</span></div>
-  <div className="mt-3 max-h-[420px] space-y-2 overflow-auto">{captions.length===0?<p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Generate captions from scene narration.</p>:captions.map((c:any)=><div key={c.id} onClick={()=>onSelect(c.id)} className={`cursor-pointer rounded-lg border p-3 ${selected?.id===c.id?"border-signal":"border-border"}`}><Input value={c.text} onChange={e=>onUpdate(c.id,{text:e.target.value})} className="h-8"/><div className="mt-2 flex gap-2"><Input type="number" step=".01" value={Number(c.start_seconds).toFixed(2)} onChange={e=>onUpdate(c.id,{start_seconds:Number(e.target.value)})}/><Input type="number" step=".01" value={Number(c.end_seconds).toFixed(2)} onChange={e=>onUpdate(c.id,{end_seconds:Math.max(Number(c.start_seconds)+.05,Number(e.target.value))})}/></div></div>)}</div>
- </section>
+function CaptionEditor({captions,selected,onSelect,onUpdate}:{captions:any[];selected:any;onSelect:(id:string)=>void;onUpdate:(id:string,p:any)=>Promise<boolean>}) {
+  return <section className="rounded-2xl border border-border bg-surface p-4">
+    <div className="flex items-center justify-between">
+      <div><p className="font-mono text-xs text-muted-foreground">CAPTIONS</p><h3 className="font-semibold">Caption cues</h3></div>
+      <span className="font-mono text-xs text-signal">{captions.length} CUES</span>
+    </div>
+    <div className="mt-3 max-h-[420px] space-y-2 overflow-auto">
+      {captions.length === 0
+        ? <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Generate captions from scene narration.</p>
+        : captions.map((caption:any) => (
+          <CaptionCueEditor key={caption.id} caption={caption} selected={selected?.id === caption.id} onSelect={onSelect} onSave={onUpdate} />
+        ))}
+    </div>
+  </section>;
 }
-function Inspector({clip,caption,settings,onClipUpdate,onClipDelete,onCaptionUpdate,onSettings}:{clip:any;caption:any;settings:any;onClipUpdate:(id:string,p:any)=>void;onClipDelete:(id:string)=>void;onCaptionUpdate:(id:string,p:any)=>void;onSettings:(p:any)=>void}) {
- if (caption) return <section className="rounded-2xl border border-border bg-surface p-4"><p className="font-mono text-xs text-muted-foreground">CAPTION INSPECTOR</p><h3 className="mt-1 font-semibold">Cue styling</h3><div className="mt-4 grid gap-2"><select value={caption.position} onChange={e=>onCaptionUpdate(caption.id,{position:e.target.value})} className="h-9 rounded-md border border-border bg-surface px-2 text-sm"><option value="bottom">Bottom</option><option value="center">Center</option><option value="top">Top</option></select><p className="text-xs text-muted-foreground">Caption text and timing remain editable in the cue list.</p></div></section>;
- if (!clip) return <section className="rounded-2xl border border-border bg-surface p-4"><p className="font-mono text-xs text-muted-foreground">PROJECT SETTINGS</p><h3 className="mt-1 font-semibold">Timeline</h3><div className="mt-4 grid grid-cols-2 gap-2"><label className="text-xs text-muted-foreground">FPS<select value={settings?.fps||30} onChange={e=>onSettings({fps:Number(e.target.value)})} className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"><option>24</option><option>25</option><option>30</option><option>50</option><option>60</option></select></label><label className="text-xs text-muted-foreground">Grid<input className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2 text-sm" type="number" min=".1" max="10" step=".1" value={settings?.grid_seconds||1} onChange={e=>onSettings({grid_seconds:Number(e.target.value)})}/></label></div><p className="mt-3 text-xs text-muted-foreground">These settings are consumed by the future render/export phase.</p></section>;
- return <section className="rounded-2xl border border-border bg-surface p-4"><div className="flex items-center justify-between"><div><p className="font-mono text-xs text-muted-foreground">CLIP INSPECTOR</p><h3 className="font-semibold capitalize">{clip.clip_type}</h3></div><Button size="sm" variant="ghost" onClick={()=>onClipDelete(clip.id)}><Scissors/> Remove</Button></div><div className="mt-4 grid grid-cols-2 gap-2"><label className="text-xs text-muted-foreground">Start<input className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2" type="number" step=".01" min="0" value={clip.start_seconds} onChange={e=>onClipUpdate(clip.id,{start_seconds:Math.max(0,Number(e.target.value))})}/></label><label className="text-xs text-muted-foreground">Duration<input className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2" type="number" step=".01" min=".1" value={clip.duration_seconds} onChange={e=>onClipUpdate(clip.id,{duration_seconds:Math.max(.1,Number(e.target.value))})}/></label><label className="text-xs text-muted-foreground">Source in<input className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2" type="number" step=".01" min="0" value={clip.source_start_seconds} onChange={e=>onClipUpdate(clip.id,{source_start_seconds:Math.max(0,Number(e.target.value))})}/></label><label className="text-xs text-muted-foreground">Volume<input className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2" type="number" step=".05" min="0" max="2" value={clip.volume} onChange={e=>onClipUpdate(clip.id,{volume:Math.max(0,Math.min(2,Number(e.target.value)))})}/></label></div><div className="mt-3 flex gap-2"><Button size="sm" variant="panel" onClick={()=>onClipUpdate(clip.id,{start_seconds:Math.max(0,Number(clip.start_seconds)-.1)})}>← 0.1s</Button><Button size="sm" variant="panel" onClick={()=>onClipUpdate(clip.id,{start_seconds:Number(clip.start_seconds)+.1})}>0.1s →</Button></div></section>
+
+function Inspector({clip,caption,settings,onClipUpdate,onClipDelete,onCaptionUpdate,onSettings}:{clip:any;caption:any;settings:any;onClipUpdate:(id:string,p:any)=>Promise<boolean>;onClipDelete:(id:string)=>void;onCaptionUpdate:(id:string,p:any)=>Promise<boolean>;onSettings:(p:any)=>void}) {
+  if (caption) return <section className="rounded-2xl border border-border bg-surface p-4"><p className="font-mono text-xs text-muted-foreground">CAPTION INSPECTOR</p><h3 className="mt-1 font-semibold">Cue styling</h3><div className="mt-4 grid gap-2"><select value={caption.position} onChange={e=>onCaptionUpdate(caption.id,{position:e.target.value})} className="h-9 rounded-md border border-border bg-surface px-2 text-sm"><option value="bottom">Bottom</option><option value="center">Center</option><option value="top">Top</option></select><p className="text-xs text-muted-foreground">Caption text and timing remain editable in the cue list.</p></div></section>;
+  if (!clip) return <section className="rounded-2xl border border-border bg-surface p-4"><p className="font-mono text-xs text-muted-foreground">PROJECT SETTINGS</p><h3 className="mt-1 font-semibold">Timeline</h3><div className="mt-4 grid grid-cols-2 gap-2"><label className="text-xs text-muted-foreground">FPS<select value={settings?.fps||30} onChange={e=>onSettings({fps:Number(e.target.value)})} className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"><option>24</option><option>25</option><option>30</option><option>50</option><option>60</option></select></label><label className="text-xs text-muted-foreground">Grid<input className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2 text-sm" type="number" min=".1" max="10" step=".1" value={settings?.grid_seconds||1} onChange={e=>onSettings({grid_seconds:Number(e.target.value)})}/></label></div><p className="mt-3 text-xs text-muted-foreground">These settings are consumed by the future render/export phase.</p></section>;
+  return <ClipInspectorForm clip={clip} onSave={onClipUpdate} onDelete={onClipDelete} />;
 }
 function PreviewImage({path}:{path:string}){const {data}=useQuery({queryKey:["timeline_preview",path],queryFn:async()=>{const r=await supabase.storage.from("project-assets").createSignedUrl(path,300);return r.data?.signedUrl||null}});return data?<img src={data} className="size-full object-contain" alt="Scene preview"/>:<div className="flex size-full items-center justify-center text-white/50">Loading…</div>}
 function PreviewVideo({path,time}:{path:string;time:number}){const {data}=useQuery({queryKey:["timeline_preview",path],queryFn:async()=>{const r=await supabase.storage.from("project-assets").createSignedUrl(path,300);return r.data?.signedUrl||null}});return data?<video src={data} className="size-full object-contain" controls onLoadedMetadata={e=>{try { e.currentTarget.currentTime = time; } catch { /* Browser may reject seeking before metadata is ready. */ }}}/>:<div className="flex size-full items-center justify-center text-white/50">Loading…</div>}
