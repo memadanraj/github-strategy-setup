@@ -3,6 +3,7 @@ import {z} from "zod";
 import {requireSupabaseAuth} from "@/integrations/supabase/auth-middleware";
 import {getRenderProvider,type RenderManifest} from "./render.providers.server";
 import { claimRenderJobFinalization } from "./render-finalization";
+import { cancelRenderJobWithProvider } from "./render-cancellation";
 import { downloadRemoteMedia } from "./remote-media.server";
 async function adm():Promise<any>{return (await import("@/integrations/supabase/client.server")).supabaseAdmin}
 async function signManifest(admin:any,m:RenderManifest){
@@ -341,11 +342,21 @@ export const getRenderJob = createServerFn({ method: "POST" })
     }
   });
 export const cancelRenderJob=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),jobId:z.string().uuid()}).parse(d)).handler(async({data,context})=>{
- const s:any=context.supabase;
- const r=await s.from("render_jobs").update({status:"cancelled",updated_at:new Date().toISOString(),finished_at:new Date().toISOString()})
-  .eq("id",data.jobId).eq("project_id",data.projectId).in("status",["queued","processing"]).is("finalization_started_at",null).select("id").maybeSingle();
- if(r.error)return{ok:false,error:"Couldn't cancel this render job."};
- if(!r.data)return{ok:false,error:"The render job is not cancellable or has already started finalizing its export."};
- return{ok:true};
+ const session:any=context.supabase;
+ const jobResult=await session.from("render_jobs")
+  .select("id,project_id,user_id,status,provider_job_id,finalization_started_at")
+  .eq("id",data.jobId).eq("project_id",data.projectId).eq("user_id",context.userId).maybeSingle();
+ if(jobResult.error||!jobResult.data)return{ok:false,error:"Render job not found."};
+
+ const admin=await adm();
+ return cancelRenderJobWithProvider(
+  jobResult.data,
+  getRenderProvider(),
+  async()=>await admin.from("render_jobs")
+   .update({status:"cancelled",updated_at:new Date().toISOString(),finished_at:new Date().toISOString()})
+   .eq("id",data.jobId).eq("project_id",data.projectId).eq("user_id",context.userId)
+   .in("status",["queued","processing"]).is("finalization_started_at",null)
+   .select("id").maybeSingle(),
+ );
 });
 export const getExportUrl=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),exportId:z.string().uuid()}).parse(d)).handler(async({data,context})=>{const s:any=context.supabase; const e=(await s.from("exports").select("storage_path,filename,status").eq("id",data.exportId).eq("project_id",data.projectId).maybeSingle()).data;if(!e?.storage_path||e.status!=="ready")return{ok:false,error:"Export is not ready."};const r=await s.storage.from("project-assets").createSignedUrl(e.storage_path,900);if(r.error)return{ok:false,error:r.error.message};return{ok:true,url:r.data.signedUrl,filename:e.filename}});

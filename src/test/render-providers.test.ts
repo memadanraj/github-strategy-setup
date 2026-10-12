@@ -151,6 +151,27 @@ describe("HttpRenderProvider", () => {
     });
   });
 
+  it("cancels a compatible renderer job via DELETE and preserves credentials", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new HttpRenderProvider("https://renderer.example.com/", "server-secret");
+    await expect(provider.cancel("job/123")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://renderer.example.com/jobs/job%2F123",
+      expect.objectContaining({
+        method: "DELETE",
+        headers: expect.objectContaining({ Authorization: "Bearer server-secret" }),
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
+  it("does not confirm renderer cancellation for non-2xx responses", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not supported", { status: 501 })));
+    await expect(new HttpRenderProvider("https://renderer.example.com").cancel("job-123"))
+      .rejects.toThrow("Renderer cancellation failed (501)");
+  });
+
   it("surfaces non-2xx submission and status responses", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("bad gateway", { status: 502 })));
     const provider = new HttpRenderProvider("https://renderer.example.com");
