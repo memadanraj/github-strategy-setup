@@ -210,3 +210,109 @@ export function ClipInspectorForm({
     </section>
   );
 }
+ 
+
+export type TimelineSettingsFormValue = {
+  fps: number;
+  grid_seconds: number;
+};
+
+type SettingsDraft = { fps: string; grid: string };
+type SettingsPatch = { fps: number; grid_seconds: number };
+
+function toSettingsDraft(settings?: TimelineSettingsFormValue | null): SettingsDraft {
+  return {
+    fps: String(settings?.fps ?? 30),
+    grid: String(settings?.grid_seconds ?? 1),
+  };
+}
+
+export function TimelineSettingsForm({
+  settings,
+  onSave,
+}: {
+  settings?: TimelineSettingsFormValue | null;
+  onSave: (patch: SettingsPatch) => Promise<boolean>;
+}) {
+  const [draft, setDraft] = useState<SettingsDraft>(() => toSettingsDraft(settings));
+  const [baseline, setBaseline] = useState<SettingsDraft>(() => toSettingsDraft(settings));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const next = toSettingsDraft(settings);
+    setDraft(next);
+    setBaseline(next);
+  }, [settings?.fps, settings?.grid_seconds]);
+
+  const dirty = draft.fps !== baseline.fps || draft.grid !== baseline.grid;
+
+  async function save() {
+    if (!dirty || saving) return;
+    setSaving(true);
+    try {
+      const patch: SettingsPatch = {
+        fps: numericInput(draft.fps),
+        grid_seconds: numericInput(draft.grid),
+      };
+      const saved = await onSave(patch);
+      if (saved) {
+        const next = { ...draft };
+        setDraft(next);
+        setBaseline(next);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-border bg-surface p-4">
+      <p className="font-mono text-xs text-muted-foreground">PROJECT SETTINGS</p>
+      <h3 className="mt-1 font-semibold">Timeline</h3>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <label htmlFor="timeline-fps" className="text-xs text-muted-foreground">
+          FPS
+          <select
+            id="timeline-fps"
+            value={draft.fps}
+            onChange={(event) => setDraft((value) => ({ ...value, fps: event.target.value }))}
+            className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
+          >
+            <option value="24">24</option>
+            <option value="25">25</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+            <option value="60">60</option>
+          </select>
+        </label>
+        <label htmlFor="timeline-grid" className="text-xs text-muted-foreground">
+          Grid (seconds)
+          <Input
+            id="timeline-grid"
+            type="number"
+            min=".1"
+            max="10"
+            step=".1"
+            value={draft.grid}
+            onChange={(event) => setDraft((value) => ({ ...value, grid: event.target.value }))}
+          />
+        </label>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        {dirty && <p role="status" className="text-xs text-muted-foreground">Unsaved changes</p>}
+        <Button
+          className="ml-auto"
+          size="sm"
+          variant="signal"
+          disabled={!dirty || saving}
+          onClick={() => void save()}
+        >
+          {saving ? "Saving…" : "Save settings"}
+        </Button>
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        These settings are consumed by the render/export pipeline.
+      </p>
+    </section>
+  );
+}
