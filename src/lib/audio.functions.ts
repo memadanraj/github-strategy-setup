@@ -150,9 +150,41 @@ export const generateSceneVoiceover=createServerFn({method:"POST"}).middleware([
  });
 
 export const previewVoice=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),voiceId:z.string().uuid()}).parse(d)).handler(async({data,context})=>{
- const s:any=context.supabase;const v=(await s.from("voices").select("provider,provider_voice_id,preview_url").eq("id",data.voiceId).maybeSingle()).data;if(!v)return{ok:false,error:"Voice not found."};if(v.preview_url)return{ok:true,url:v.preview_url,charged:false};
- let id:string;try{id=await job(s,"tts_preview",data.projectId,{voiceId:data.voiceId})}catch(e:any){return{ok:false,error:"Couldn't start preview."}}
- try{const a=await voiceProvider(v.provider).synthesize({text:"This is a short preview for your video.",voiceId:v.provider_voice_id});const path=`${context.userId}/${data.projectId}/audio/previews/${data.voiceId}.mp3`;const up=await db.storage.from("project-assets").upload(path,a.bytes,{contentType:a.contentType,upsert:true});if(up.error)throw new Error("Couldn't store preview");await doneJob(id,{preview:true,path});return{ok:true,url:await url(path),charged:true}}catch(e:any){const message=e instanceof Error?e.message:"Audio generation failed.";const outcome=await failJob(id,message);return{ok:false,error:outcome.completed?"The job completed but its response could not be confirmed. Refresh the project to see the saved result.":outcome.error}}
+ const s:any=context.supabase;
+ const voiceResult=await s.from("voices").select("provider,provider_voice_id,preview_url").eq("id",data.voiceId).maybeSingle();
+ if(voiceResult.error||!voiceResult.data)return{ok:false,error:"Voice not found."};
+ const voice=voiceResult.data;
+ if(voice.preview_url)return{ok:true,url:voice.preview_url,charged:false};
+ let id:string;
+ try{id=await job(s,"tts_preview",data.projectId,{voiceId:data.voiceId})}
+ catch(e:any){return{ok:false,error:"Couldn't start preview."}}
+
+ let outputPath:string|undefined;
+ let playbackUrl:string|undefined;
+ let uploadAttempted=false;
+ let completionAttempted=false;
+ try{
+  const audio=await voiceProvider(voice.provider).synthesize({text:"This is a short preview for your video.",voiceId:voice.provider_voice_id});
+  outputPath=context.userId+"/"+data.projectId+"/audio/previews/"+data.voiceId+"/"+crypto.randomUUID()+".mp3";
+  uploadAttempted=true;
+  const upload=await db.storage.from("project-assets").upload(outputPath,audio.bytes,{contentType:audio.contentType});
+  if(upload.error)throw new Error("Couldn't store preview.");
+  playbackUrl=await url(outputPath);
+  completionAttempted=true;
+  await doneJob(id,{preview:true,path:outputPath});
+  return{ok:true,url:playbackUrl,charged:true};
+ }catch(e:any){
+  const message=e instanceof Error?e.message:"Audio preview failed.";
+  const outcome=await failJob(id,message,{
+   completionMayHaveSucceeded:completionAttempted,
+   cleanupUpload:uploadAttempted&&outputPath?async()=>{
+    const removed=await db.storage.from("project-assets").remove([outputPath]);
+    if(removed.error)throw new Error("Preview file cleanup failed.");
+   }:undefined
+  });
+  if(outcome.completed&&playbackUrl)return{ok:true,url:playbackUrl,charged:true};
+  return{ok:false,error:outcome.error};
+ }
 });
 
 export const syncElevenLabsVoices=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).handler(async()=>{
