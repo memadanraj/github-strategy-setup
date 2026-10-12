@@ -3,7 +3,11 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { downloadRemoteMedia, remoteMediaHeaderVariants } from "./remote-media.server";
 import { normalizeProviderVideoStatus, readProviderJobId, readProviderVideoError, readProviderVideoUrl } from "./video-job-contract";
-import { persistGeneratedVisual } from "./visual-job-persistence";
+import {
+  persistGeneratedVisual,
+  settleVisualJobFailure,
+  type VisualJobFailureState,
+} from "./visual-job-persistence";
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1";
 
@@ -74,6 +78,39 @@ async function fetchVideoContent(jobId: string, apiKey: string): Promise<Buffer>
     },
   );
   return Buffer.from(result.bytes);
+}
+
+type CheckedVisualAdmin = {
+  rpc: (
+    name: "fail_generation_job_checked",
+    args: { _job_id: string; _error: string },
+  ) => PromiseLike<{ data: string | null; error: { message: string } | null }>;
+};
+
+async function failVisualJobChecked(
+  admin: CheckedVisualAdmin,
+  jobId: string,
+  message: string,
+): Promise<VisualJobFailureState> {
+  const { data, error } = await admin.rpc("fail_generation_job_checked", {
+    _job_id: jobId,
+    _error: message.slice(0, 500),
+  });
+  if (error || typeof data !== "string") {
+    throw new Error("Could not confirm generation job settlement.");
+  }
+  const allowedStates: VisualJobFailureState[] = [
+    "failed_refunded",
+    "failed_without_reservation",
+    "already_failed",
+    "already_complete",
+    "not_found",
+    "not_active",
+  ];
+  if (!allowedStates.includes(data as VisualJobFailureState)) {
+    throw new Error("Generation job settlement returned an unknown state.");
+  }
+  return data as VisualJobFailureState;
 }
 
 async function buildVisualContext(supabase: any, projectId: string) {
@@ -400,8 +437,14 @@ export const generateSceneClip = createServerFn({ method: "POST" })
       return { ok: true as const, jobId: jobId as string };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Clip generation failed";
-      await supabaseAdmin.rpc("fail_generation_job", { _job_id: jobId as string, _error: msg });
-      return { ok: false as const, error: `${msg} Your credits were refunded.` };
+      const outcome = await settleVisualJobFailure(
+        (message) => failVisualJobChecked(supabaseAdmin, jobId as string, message),
+        msg,
+      );
+      if (outcome.state === "already_complete") {
+        return { ok: true as const, jobId: jobId as string };
+      }
+      return { ok: false as const, error: outcome.error };
     }
   });
 
@@ -421,8 +464,12 @@ export const checkSceneClip = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const fail = async (msg: string) => {
-      await supabaseAdmin.rpc("fail_generation_job", { _job_id: job.id, _error: msg });
-      return { status: "failed" as const, error: `${msg} Your credits were refunded.` };
+      const outcome = await settleVisualJobFailure(
+        (message) => failVisualJobChecked(supabaseAdmin, job.id, message),
+        msg,
+      );
+      if (outcome.state === "already_complete") return { status: "complete" as const };
+      return { status: "failed" as const, error: outcome.error };
     };
     const startedAt = new Date(job.started_at ?? job.created_at).getTime();
     const providerId = job.output?.provider_job_id as string | undefined;
@@ -474,11 +521,20 @@ export const checkSceneClip = createServerFn({ method: "POST" })
 
       const path = `${project.user_id}/${job.project_id}/${crypto.randomUUID()}.mp4`;
       const storage = supabaseAdmin.storage.from("project-assets");
-      const up = await storage.upload(path, bytes, { contentType: "video/mp4" });
-      if (up.error) throw new Error("Couldn't store the generated clip.");
-
+      let uploadAttempted = false;
+      let assetRegistrationAttempted = false;
       let assetId: string | undefined;
+      let sceneAttached = false;
+      let completionStarted = false;
+
       try {
+        uploadAttempted = true;
+        const up = await storage.upload(path, bytes, { contentType: "video/mp4" });
+        if (up.error) throw new Error("Couldn't store the generated clip.");
+
+        // The insert may have committed even if the response is lost, so cleanup
+        // searches by project/path instead of relying on a returned asset ID.
+        assetRegistrationAttempted = true;
         const { data: asset, error: assetError } = await supabaseAdmin
           .from("assets")
           .insert({
@@ -490,23 +546,52 @@ export const checkSceneClip = createServerFn({ method: "POST" })
           })
           .select("id")
           .single();
-        if (assetError || !asset) throw new Error("Couldn't register the generated clip asset.");
+        if (assetError || !asset?.id) throw new Error("Couldn't register the generated clip asset.");
         assetId = asset.id;
 
-        const { error: sceneUpdateError } = await supabaseAdmin
-          .from("scenes").update({ clip_path: path }).eq("id", sceneId).eq("project_id", job.project_id);
-        if (sceneUpdateError) throw new Error("Couldn't attach the generated clip to its scene.");
+        const { data: attached, error: sceneUpdateError } = await supabaseAdmin
+          .from("scenes")
+          .update({ clip_path: path })
+          .eq("id", sceneId)
+          .eq("project_id", job.project_id)
+          .select("id")
+          .single();
+        if (sceneUpdateError || !attached?.id) throw new Error("Couldn't attach the generated clip to its scene.");
+        sceneAttached = true;
 
+        completionStarted = true;
         const { error: completionError } = await supabaseAdmin.rpc(
           "complete_generation_job",
           { _job_id: job.id, _output: { path, asset_id: assetId, provider_job_id: providerId } },
         );
         if (completionError) throw new Error("Couldn't finalize the clip job.");
       } catch (persistError) {
-        // Best-effort cleanup prevents orphan media when a later DB write fails.
-        if (assetId) await supabaseAdmin.from("assets").delete().eq("id", assetId);
-        await storage.remove([path]);
-        throw persistError;
+        const message = persistError instanceof Error ? persistError.message : "Clip persistence failed.";
+        const outcome = await settleVisualJobFailure(
+          (failureMessage) => failVisualJobChecked(supabaseAdmin, job.id, failureMessage),
+          message,
+          {
+            completionMayHaveSucceeded: completionStarted && sceneAttached && Boolean(assetId),
+            cleanupAsset: assetRegistrationAttempted
+              ? async () => {
+                  const { error } = await supabaseAdmin
+                    .from("assets")
+                    .delete()
+                    .eq("project_id", job.project_id)
+                    .eq("storage_path", path);
+                  if (error) throw new Error("Asset record cleanup failed.");
+                }
+              : undefined,
+            cleanupUpload: uploadAttempted
+              ? async () => {
+                  const { error } = await storage.remove([path]);
+                  if (error) throw new Error("Uploaded clip cleanup failed.");
+                }
+              : undefined,
+          },
+        );
+        if (outcome.completed) return { status: "complete" as const };
+        return { status: "failed" as const, error: outcome.error };
       }
       return { status: "complete" as const };
     } catch (e) {
