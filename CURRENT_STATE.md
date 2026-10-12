@@ -144,4 +144,5 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - A cancellation event now confirms the subscription row was actually marked canceled, then recomputes the account plan from any remaining active, trialing, or past-due subscriptions.
 - The webhook no longer automatically sets a user to the free plan when another qualifying subscription remains. Past-due stays eligible to match the current payment-recovery grace-period behavior; if no qualifying subscription remains, the effective plan becomes free.
 - Unit coverage checks multiple subscriptions, grace-period handling, terminal/paused subscriptions, invalid timestamps, and the no-subscription fallback.
+- GitHub Actions run [38232544992](https://github.com/memadanraj/github-strategy-setup/actions/runs/38232544992) passed lint, TypeScript typecheck, unit/component tests (**30 test files, 252 tests**), and production build for code commit `cc4fcc900aac486eded29715823e73b0d320a7ad`. Lint still reports inherited warnings, but no lint errors.
 - This remains mocked/unit-level verification. Paddle event ordering and the real subscription lifecycle still require sandbox testing.

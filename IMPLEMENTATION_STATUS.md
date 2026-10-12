@@ -2,7 +2,7 @@
 
 This is an evidence-based phase tracker for the master plan. A UI control or source file alone is not proof a feature is complete. `COMPLETE` should be used only after persistence, security, error paths, and relevant tests pass.
 
-**Working branch:** `hardening/phase-13-render-recovery`  
+**Working branch:** `hardening/phase-14-billing-plan-reconciliation`  
 **Target:** stacked draft PR; no direct changes to `main`  
 **Status date:** 2026-10-12
 
@@ -21,7 +21,7 @@ This is an evidence-based phase tracker for the master plan. A UI control or sou
 | 10. Rendering | PARTIAL / TEST | Render-provider adapters, bounded download and serialized finalization exist. New `mp4-validation.ts` checks allowed media types, the 512 MiB limit, valid top-level box lengths and required `ftyp`/`moov`/non-empty `mdat` boxes before export upload. Structurally invalid output marks the render job failed and releases the finalization claim. Seven MP4 tests pass; real-provider render, codec/decode, playback and staging finalization-race tests remain. |
 | 11. Export and sharing | PARTIAL / TEST | Share links store only SHA-256 token hashes, support optional scrypt password protection, 1/7/30-day or no-expiry links, revocation, a password lockout and temporary signed MP4 playback. Migration `0018`; token/password primitives are unit-tested. Route, storage, expiry, revocation, and migration behavior require staging verification. |
 | 12. Credits | PARTIAL / TEST | Synchronous AI tasks now use `fail_generation_job_checked` instead of the older void failure RPC. Refund wording depends on returned terminal state; `already_complete` plus a persisted result returns success, while unknown settlement triggers reconciliation messaging. Ledger race/concurrency, idempotency and live billing/job integration tests remain. |
-| 13. Billing | PARTIAL | Paddle client, webhook signature/event handling and tables exist. Price IDs and sandbox lifecycle tests remain; legacy Stripe SQL files/migration order need careful reconciliation. |
+| 13. Billing | PARTIAL / TEST | Paddle client, webhook signature/event handling and tables exist. Cancellation now reconciles the account plan against remaining active/trialing/past-due subscriptions; four regression tests pass in CI. Price IDs, sandbox lifecycle/event-order tests, and legacy Stripe SQL/migration-order reconciliation remain. |
 | 14. Admin | EXISTING / TEST | Admin users/plans/credits/jobs UI/server code exists. Role-denial and audit-trail tests remain. |
 | 15. AI Director | MISSING / FUTURE | Requires a proposed change plan, preview/approval, safe apply and undo/versioning. |
 | 16. Advanced editor and scale | FUTURE | Collaboration, advanced effects/keyframes, 4K/60 FPS, social publishing, marketplace and public API are later-stage work. |
@@ -166,4 +166,5 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Cancellation handling now verifies that the subscription status write affected a row before changing profile entitlements.
 - After cancellation, the webhook checks for other remaining active, trialing, or past-due subscriptions and applies the newest qualifying plan, falling back to `free` only when no qualifying subscription remains.
 - Regression tests cover multiple plan rows, pending payment recovery, paused/canceled rows, and missing candidates.
+- CI run [38232544992](https://github.com/memadanraj/github-strategy-setup/actions/runs/38232544992) passed lint, typecheck, unit/component tests (**30 test files, 252 tests**), and production build on code commit `cc4fcc900aac486eded29715823e73b0d320a7ad`. Lint still emits inherited warnings without errors.
 - Staging verification remains required for real Paddle cancellation, renewal, grace-period, and event-order scenarios.
