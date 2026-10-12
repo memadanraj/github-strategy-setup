@@ -19,7 +19,7 @@ This file distinguishes **code present**, **automated checks**, and **live/stagi
 | Landing, auth, reset | Existing routes | Sign-up/login/reset against staging, OAuth callback, invalid/expired session cases |
 | Dashboard and projects | Existing routes | Database-backed end-to-end project CRUD and cross-user access denial |
 | Creation wizard | Implemented | Persists versioned production brief in `projects.settings`; migration `0016` must be applied to staging |
-| Writing/research/scripts | Existing; persistence failure gates tested | Real gateway/schema failure, rate/timeout behavior, evidence-backed research not implemented |
+| Writing/research/scripts | Existing; persistence failure gates tested | Scene drafting now uses the shared checked AI-job runner with structured-output validation and compensation for generated scene rows after confirmed settlement failure. Real gateway/schema failure, rate/timeout behavior, concurrency, and staging persistence remain to be verified; evidence-backed research is not implemented |
 | Scene breakdown | Implemented | AI output validated before replacing scenes; RPC migration `0015` needs staging verification |
 | Scene CRUD/order | Implemented in branch | Create/delete/reorder use transactional RPCs; migrations `0019` and `0020` need staging RLS/concurrency verification |
 | Project versions | Implemented in branch | Atomic snapshots/restores via `0017`; staging restore and asset-link checks remain |
@@ -118,3 +118,13 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - The clip path keeps a 128 MiB response limit. If the provider's returned URL is stale, invalid, non-MP4 or malformed, the code tries the authenticated provider-content endpoint; if that also fails, normal checked job-failure settlement runs rather than persisting invalid media as `.mp4`.
 - CI passed locked dependency install, lint, TypeScript typecheck, unit/component tests and production build for commit `39ea7296a822d7b3869494b35e72cdf6e4d888f0`.
 - Live AI provider output and actual playback still require staging verification; CI does not prove a real provider's codec output is playable.
+
+
+## Update — scene drafting job settlement (October 12, 2026)
+
+- `draftScenesWithAi` now uses the shared `runAiTask` job runner instead of maintaining its own credit reservation, completion, and legacy failure calls.
+- Scene generation validates the returned scene payload before insertion, checks failures from the existing-scene count query, assigns IDs before insert, and removes only those IDs if an insert error may have occurred after the database commit.
+- If completion fails twice and checked settlement confirms the generation job failed, the runner attempts to remove only the newly inserted scene rows. If settlement or cleanup is uncertain, the response reports reconciliation rather than claiming that the operation/refund succeeded.
+- `already_failed` alone no longer produces a definitive “credits refunded” claim in shared AI/visual settlement messages. The clip poller's pre-existing failed-job response also no longer appends an unconditional refund claim.
+- GitHub Actions passed locked dependency installation, lint, TypeScript typecheck, unit/component tests, and production build for commit `c46a58336fa825cee2e67a9ea1b2e775bfc039c2`.
+- This is mocked/unit-level verification. Real provider calls, database failure races, and compensation behavior still require staging validation.
