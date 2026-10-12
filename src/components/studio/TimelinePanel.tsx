@@ -6,6 +6,12 @@ import { Play, Pause, RotateCcw, Wand2, Captions as CaptionsIcon, Scissors, Lock
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import { rebuildProjectTimeline, regenerateProjectCaptions } from "@/lib/timeline-operations";
+import {
+  validateTimelineCaptionPatch,
+  validateTimelineClipPatch,
+  validateTimelineSettingsPatch,
+} from "@/lib/timeline-validation";
 
 const db:any = supabase;
 const PX = 72;
@@ -92,34 +98,17 @@ export function TimelinePanel({ project }: { project: Project }) {
     if (clips.length && !confirm("Rebuild the timeline? Existing timeline clips will be replaced.")) return;
     setBuilding(true);
     try {
-      if (clips.length) {
-        const d = await db.from("timeline_clips").delete().eq("project_id", project.id);
-        if (d.error) throw d.error;
-      }
-      let videoTrack = tracks.find((t:any)=>t.track_type==="video");
-      let audioTrack = tracks.find((t:any)=>t.track_type==="audio");
-      let captionTrack = tracks.find((t:any)=>t.track_type==="caption");
-      if (!videoTrack) videoTrack = await addTrack("Video", "video", 0);
-      if (!audioTrack) audioTrack = await addTrack("Audio", "audio", 1);
-      if (!captionTrack) captionTrack = await addTrack("Captions", "caption", 2);
-      let cursor = 0;
-      const visualRows:any[] = [];
-      for (const scene of scenes) {
-        const dur = Math.max(0.1, Number(scene.duration_seconds || 5));
-        visualRows.push({
-          project_id: project.id, track_id: videoTrack.id, scene_id: scene.id,
-          clip_type: scene.clip_path ? "video" : "image", start_seconds: cursor,
-          duration_seconds: dur, metadata: { source: scene.clip_path || scene.image_path || null }
-        });
-        cursor += dur;
-      }
-      const ins = await db.from("timeline_clips").insert(visualRows);
-      if (ins.error) throw ins.error;
-      await db.from("timeline_settings").upsert({ project_id: project.id, width: project.format === "short" ? 1080 : 1920, height: project.format === "short" ? 1920 : 1080, updated_at: new Date().toISOString() });
+      const result = await rebuildProjectTimeline(
+        (args) => db.rpc("rebuild_project_timeline", args),
+        project.id,
+      );
       await refresh();
-      toast.success("Timeline built from scenes.");
-    } catch (e:any) { toast.error(e.message || "Couldn't build timeline."); }
-    finally { setBuilding(false); }
+      toast.success(`Timeline built from scenes (${result.clipCount} clips).`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not rebuild timeline. Existing clips were preserved.");
+    } finally {
+      setBuilding(false);
+    }
   }
 
   async function generateCaptions() {
@@ -127,33 +116,17 @@ export function TimelinePanel({ project }: { project: Project }) {
     if (captions.length && !confirm("Replace existing captions?")) return;
     setCaptioning(true);
     try {
-      await db.from("captions").delete().eq("project_id", project.id);
-      let cursor = 0;
-      const rows:any[] = [];
-      for (const scene of scenes) {
-        const text = String(scene.narration || "").trim();
-        const dur = Math.max(0.1, Number(scene.duration_seconds || 5));
-        if (text) {
-          const words = text.split(/\s+/).filter(Boolean);
-          const chunkSize = 5;
-          const count = Math.ceil(words.length / chunkSize);
-          for (let i=0;i<count;i++) {
-            const chunk = words.slice(i*chunkSize,(i+1)*chunkSize).join(" ");
-            const start = cursor + (dur * i / count);
-            const end = cursor + (dur * (i+1) / count);
-            rows.push({ project_id: project.id, scene_id: scene.id, text: chunk, start_seconds: start, end_seconds: end, position: "bottom" });
-          }
-        }
-        cursor += dur;
-      }
-      if (rows.length) {
-        const r = await db.from("captions").insert(rows);
-        if (r.error) throw r.error;
-      }
+      const result = await regenerateProjectCaptions(
+        (args) => db.rpc("regenerate_project_captions", args),
+        project.id,
+      );
       await refresh();
-      toast.success(`Created ${rows.length} caption cues.`);
-    } catch (e:any) { toast.error(e.message || "Caption generation failed."); }
-    finally { setCaptioning(false); }
+      toast.success(`Created ${result.cueCount} caption cues.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Caption generation failed. Existing captions were preserved.");
+    } finally {
+      setCaptioning(false);
+    }
   }
 
   async function addTrack(name:string,type:string,position:number) {
@@ -171,20 +144,63 @@ export function TimelinePanel({ project }: { project: Project }) {
   }
 
   async function updateClip(id:string, patch:any) {
-    const r = await db.from("timeline_clips").update({...patch,updated_at:new Date().toISOString()}).eq("id",id);
-    if (r.error) toast.error(r.error.message); else qc.invalidateQueries({queryKey:["timeline_clips",project.id]});
+    const invalid = validateTimelineClipPatch(patch);
+    if (invalid) { toast.error(invalid); return; }
+    try {
+      const r = await db.from("timeline_clips")
+        .update({...patch,updated_at:new Date().toISOString()})
+        .eq("project_id",project.id).eq("id",id)
+        .select("id").maybeSingle();
+      if (r.error) { toast.error(r.error.message); return; }
+      if (!r.data) { toast.error("Clip not found or no longer available."); return; }
+      await qc.invalidateQueries({queryKey:["timeline_clips",project.id]});
+    } catch {
+      toast.error("Could not save the clip. Check your connection and try again.");
+    }
   }
   async function deleteClip(id:string) {
-    const r = await db.from("timeline_clips").delete().eq("id",id);
-    if (r.error) toast.error(r.error.message); else {setSelected(null);refresh();}
+    try {
+      const r = await db.from("timeline_clips").delete()
+        .eq("project_id",project.id).eq("id",id)
+        .select("id").maybeSingle();
+      if (r.error) { toast.error(r.error.message); return; }
+      if (!r.data) { toast.error("Clip not found or no longer available."); return; }
+      setSelected(null);
+      await refresh();
+    } catch {
+      toast.error("Could not delete the clip. Check your connection and try again.");
+    }
   }
   async function updateCaption(id:string, patch:any) {
-    const r = await db.from("captions").update({...patch,updated_at:new Date().toISOString()}).eq("id",id);
-    if (r.error) toast.error(r.error.message); else qc.invalidateQueries({queryKey:["captions",project.id]});
+    const current = captions.find((caption:any) => caption.id === id);
+    if (!current) { toast.error("Caption not found or no longer available."); return; }
+    const invalid = validateTimelineCaptionPatch(patch, current);
+    if (invalid) { toast.error(invalid); return; }
+    try {
+      const r = await db.from("captions")
+        .update({...patch,updated_at:new Date().toISOString()})
+        .eq("project_id",project.id).eq("id",id)
+        .select("id").maybeSingle();
+      if (r.error) { toast.error(r.error.message); return; }
+      if (!r.data) { toast.error("Caption not found or no longer available."); return; }
+      await qc.invalidateQueries({queryKey:["captions",project.id]});
+    } catch {
+      toast.error("Could not save the caption. Check your connection and try again.");
+    }
   }
   async function saveSettings(patch:any) {
-    const r = await db.from("timeline_settings").upsert({project_id:project.id,...patch,updated_at:new Date().toISOString()});
-    if (r.error) toast.error(r.error.message); else qc.invalidateQueries({queryKey:["timeline_settings",project.id]});
+    const invalid = validateTimelineSettingsPatch(patch);
+    if (invalid) { toast.error(invalid); return; }
+    try {
+      const r = await db.from("timeline_settings")
+        .upsert({project_id:project.id,...patch,updated_at:new Date().toISOString()})
+        .select("project_id").single();
+      if (r.error) { toast.error(r.error.message); return; }
+      if (!r.data) { toast.error("Timeline settings could not be confirmed."); return; }
+      await qc.invalidateQueries({queryKey:["timeline_settings",project.id]});
+    } catch {
+      toast.error("Could not save timeline settings. Check your connection and try again.");
+    }
   }
 
   const selectedClip = clips.find((c:any)=>c.id===selected);
@@ -275,5 +291,5 @@ function Inspector({clip,caption,settings,onClipUpdate,onClipDelete,onCaptionUpd
  return <section className="rounded-2xl border border-border bg-surface p-4"><div className="flex items-center justify-between"><div><p className="font-mono text-xs text-muted-foreground">CLIP INSPECTOR</p><h3 className="font-semibold capitalize">{clip.clip_type}</h3></div><Button size="sm" variant="ghost" onClick={()=>onClipDelete(clip.id)}><Scissors/> Remove</Button></div><div className="mt-4 grid grid-cols-2 gap-2"><label className="text-xs text-muted-foreground">Start<input className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2" type="number" step=".01" min="0" value={clip.start_seconds} onChange={e=>onClipUpdate(clip.id,{start_seconds:Math.max(0,Number(e.target.value))})}/></label><label className="text-xs text-muted-foreground">Duration<input className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2" type="number" step=".01" min=".1" value={clip.duration_seconds} onChange={e=>onClipUpdate(clip.id,{duration_seconds:Math.max(.1,Number(e.target.value))})}/></label><label className="text-xs text-muted-foreground">Source in<input className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2" type="number" step=".01" min="0" value={clip.source_start_seconds} onChange={e=>onClipUpdate(clip.id,{source_start_seconds:Math.max(0,Number(e.target.value))})}/></label><label className="text-xs text-muted-foreground">Volume<input className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2" type="number" step=".05" min="0" max="2" value={clip.volume} onChange={e=>onClipUpdate(clip.id,{volume:Math.max(0,Math.min(2,Number(e.target.value)))})}/></label></div><div className="mt-3 flex gap-2"><Button size="sm" variant="panel" onClick={()=>onClipUpdate(clip.id,{start_seconds:Math.max(0,Number(clip.start_seconds)-.1)})}>← 0.1s</Button><Button size="sm" variant="panel" onClick={()=>onClipUpdate(clip.id,{start_seconds:Number(clip.start_seconds)+.1})}>0.1s →</Button></div></section>
 }
 function PreviewImage({path}:{path:string}){const {data}=useQuery({queryKey:["timeline_preview",path],queryFn:async()=>{const r=await supabase.storage.from("project-assets").createSignedUrl(path,300);return r.data?.signedUrl||null}});return data?<img src={data} className="size-full object-contain" alt="Scene preview"/>:<div className="flex size-full items-center justify-center text-white/50">Loading…</div>}
-function PreviewVideo({path,time}:{path:string;time:number}){const {data}=useQuery({queryKey:["timeline_preview",path],queryFn:async()=>{const r=await supabase.storage.from("project-assets").createSignedUrl(path,300);return r.data?.signedUrl||null}});return data?<video src={data} className="size-full object-contain" controls onLoadedMetadata={e=>{try{e.currentTarget.currentTime=time}catch{}}}/>:<div className="flex size-full items-center justify-center text-white/50">Loading…</div>}
+function PreviewVideo({path,time}:{path:string;time:number}){const {data}=useQuery({queryKey:["timeline_preview",path],queryFn:async()=>{const r=await supabase.storage.from("project-assets").createSignedUrl(path,300);return r.data?.signedUrl||null}});return data?<video src={data} className="size-full object-contain" controls onLoadedMetadata={e=>{try { e.currentTarget.currentTime = time; } catch { /* Browser may reject seeking before metadata is ready. */ }}}/>:<div className="flex size-full items-center justify-center text-white/50">Loading…</div>}
 function formatTime(v:number){const m=Math.floor(v/60);const s=v-m*60;return `${String(m).padStart(2,"0")}:${s.toFixed(1).padStart(4,"0")}`}

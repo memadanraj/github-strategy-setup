@@ -30,10 +30,27 @@ export async function admin() {
   return (await import("@/integrations/supabase/client.server")).supabaseAdmin;
 }
 
-export async function addCredits(db: any, userId: string, amount: number, kind: string, description: string) {
-  const p = (await db.from("profiles").select("credits_balance").eq("id", userId).maybeSingle()).data;
-  if (!p) throw new Error("Profile not found.");
-  const next = Math.max(0, Number(p.credits_balance) + amount);
-  await db.from("profiles").update({ credits_balance: next, updated_at: new Date().toISOString() }).eq("id", userId);
-  await db.from("credit_transactions").insert({ user_id: userId, amount, kind, description });
+export async function addCredits(
+  db: any,
+  userId: string,
+  amount: number,
+  kind: string,
+  description: string,
+  idempotencyKey: string,
+) {
+  if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 1_000_000) {
+    throw new Error("Credit grant amount is invalid.");
+  }
+  if (!idempotencyKey.trim() || idempotencyKey.length > 200) {
+    throw new Error("Credit grant idempotency key is invalid.");
+  }
+
+  const result = await db.rpc("apply_credit_transaction", {
+    _user_id: userId,
+    _amount: amount,
+    _kind: kind,
+    _description: description,
+    _idempotency_key: idempotencyKey,
+  });
+  if (result.error) throw new Error("Couldn't apply the credit ledger transaction.");
 }

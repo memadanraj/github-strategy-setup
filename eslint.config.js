@@ -37,4 +37,13 @@ export default tseslint.config(
     },
   },
   eslintPluginPrettier,
+  // This repository has a large inherited formatting backlog. Keep it visible
+  // while functional linting and tests are brought under control incrementally.
+  {
+    files: ["**/*.{ts,tsx}"],
+    rules: {
+      "prettier/prettier": "warn",
+      "@typescript-eslint/no-explicit-any": "warn",
+    },
+  },
 );

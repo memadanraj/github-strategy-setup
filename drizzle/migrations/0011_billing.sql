@@ -13,9 +13,11 @@ create table if not exists public.credit_packs (
   sort_order integer not null default 0,
   created_at timestamptz not null default now()
 );
+alter table public.credit_packs add column if not exists stripe_price_id text;
 grant select on public.credit_packs to anon, authenticated;
 grant all on public.credit_packs to service_role;
 alter table public.credit_packs enable row level security;
+drop policy if exists "Active credit packs are public" on public.credit_packs;
 create policy "Active credit packs are public" on public.credit_packs for select to anon, authenticated using (is_active);
 
 insert into public.credit_packs (slug,name,credits,price_cents,sort_order) values
@@ -34,6 +36,7 @@ create table if not exists public.stripe_customers (
 grant select on public.stripe_customers to authenticated;
 grant all on public.stripe_customers to service_role;
 alter table public.stripe_customers enable row level security;
+drop policy if exists "Users read own Stripe customer" on public.stripe_customers;
 create policy "Users read own Stripe customer" on public.stripe_customers for select to authenticated using (auth.uid()=user_id);
 
 create table if not exists public.stripe_subscriptions (
@@ -54,6 +57,7 @@ create table if not exists public.stripe_subscriptions (
 grant select on public.stripe_subscriptions to authenticated;
 grant all on public.stripe_subscriptions to service_role;
 alter table public.stripe_subscriptions enable row level security;
+drop policy if exists "Users read own Stripe subscriptions" on public.stripe_subscriptions;
 create policy "Users read own Stripe subscriptions" on public.stripe_subscriptions for select to authenticated using (auth.uid()=user_id);
 create index if not exists stripe_subscriptions_user_idx on public.stripe_subscriptions(user_id,status);
 

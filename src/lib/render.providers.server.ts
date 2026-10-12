@@ -4,13 +4,28 @@ export type RenderManifest = {
 };
 export type RenderSubmitResult = { providerJobId: string };
 export type RenderStatus = { status: "queued" | "processing" | "completed" | "failed"; progress: number; outputUrl?: string; error?: string };
-export interface RenderProvider { submit(manifest: RenderManifest): Promise<RenderSubmitResult>; status(providerJobId: string): Promise<RenderStatus> }
+export interface RenderProvider {
+  submit(manifest: RenderManifest): Promise<RenderSubmitResult>;
+  status(providerJobId: string): Promise<RenderStatus>;
+  /** Optional; a provider must confirm remote cancellation before local status is changed. */
+  cancel?(providerJobId: string): Promise<void>;
+}
 
 export class HttpRenderProvider implements RenderProvider {
   constructor(private baseUrl: string, private apiKey?: string) {}
   private headers() { return { "Content-Type": "application/json", ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}) } }
   async submit(manifest: RenderManifest) { const r = await fetch(`${this.baseUrl.replace(/\/$/, "")}/jobs`, { method: "POST", headers: this.headers(), body: JSON.stringify({ manifest }) }); if (!r.ok) throw new Error(`Renderer submit failed (${r.status})`); const j: any = await r.json(); if (!j.id && !j.jobId) throw new Error("Renderer returned no job id"); return { providerJobId: j.id || j.jobId } }
   async status(id: string): Promise<RenderStatus> { const r = await fetch(`${this.baseUrl.replace(/\/$/, "")}/jobs/${encodeURIComponent(id)}`, { headers: this.headers() }); if (!r.ok) throw new Error(`Renderer status failed (${r.status})`); const j: any = await r.json(); const raw = String(j.status || "processing"); const status: RenderStatus["status"] = raw === "succeeded" || raw === "success" ? "completed" : raw === "error" ? "failed" : raw === "queued" ? "queued" : "processing"; return { status, progress: Number(j.progress ?? 0), outputUrl: j.output_url || j.outputUrl || j.url, error: j.error?.message || j.error } }
+  /** Generic renderer contract: DELETE /jobs/:id must confirm cancellation. */
+  async cancel(id: string): Promise<void> {
+    const baseUrl = this.baseUrl.replace(/\/$/, "");
+    const response = await fetch(baseUrl + "/jobs/" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: this.headers(),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) throw new Error("Renderer cancellation failed (" + response.status + ")");
+  }
 }
 
 const AUDIO_TRACKS = new Set(["audio", "voice", "music", "sfx"]);

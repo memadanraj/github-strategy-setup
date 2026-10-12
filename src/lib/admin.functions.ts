@@ -43,13 +43,15 @@ export const adjustUserCredits = createServerFn({ method: "POST" })
     await assertAdmin(context as any);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin: any = supabaseAdmin;
-    const p = await admin.from("profiles").select("credits_balance").eq("id", data.userId).maybeSingle();
-    if (!p.data) return { ok: false as const, error: "User not found." };
-    const next = Math.max(0, p.data.credits_balance + data.amount);
-    const u = await admin.from("profiles").update({ credits_balance: next }).eq("id", data.userId);
-    if (u.error) return { ok: false as const, error: u.error.message };
-    await admin.from("credit_transactions").insert({ user_id: data.userId, amount: next - p.data.credits_balance, kind: "admin", description: `Admin: ${data.reason}` });
-    return { ok: true as const, balance: next };
+    const result = await admin.rpc("apply_credit_transaction", {
+      _user_id: data.userId,
+      _amount: data.amount,
+      _kind: "admin",
+      _description: `Admin: ${data.reason}`,
+      _idempotency_key: null,
+    });
+    if (result.error) return { ok: false as const, error: result.error.message };
+    return { ok: true as const, balance: Number(result.data) };
   });
 
 export const setUserPlan = createServerFn({ method: "POST" })
