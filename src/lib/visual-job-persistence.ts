@@ -71,20 +71,25 @@ export async function settleVisualJobFailure(
   );
   const cleanupFailures: string[] = [];
 
+  let assetCleanupFailed = false;
   if (cleanupIsSafe && cleanup.cleanupAsset) {
     try {
       await cleanup.cleanupAsset();
     } catch {
-      cleanupFailures.push("asset record");
+      cleanupFailures.push("asset/database records");
+      assetCleanupFailed = true;
     }
   }
 
-  if (cleanupIsSafe && cleanup.cleanupUpload) {
+  if (cleanupIsSafe && cleanup.cleanupUpload && !assetCleanupFailed) {
     try {
       await cleanup.cleanupUpload();
     } catch {
       cleanupFailures.push("uploaded file");
     }
+  } else if (cleanupIsSafe && cleanup.cleanupUpload && assetCleanupFailed) {
+    // Keep media in storage if database references may still point to it.
+    cleanupFailures.push("uploaded file (preserved because record cleanup failed)");
   }
 
   let settlementMessage: string;
