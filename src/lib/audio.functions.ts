@@ -342,4 +342,5 @@ export const generateMusicTrack=createServerFn({method:"POST"}).middleware([requ
   });
   if(outcome.completed&&outputTrackId&&playbackUrl)return{ok:true,trackId:outputTrackId,url:playbackUrl};
   return{ok:false,error:outcome.error};
+  }
  });
