@@ -48,7 +48,7 @@ describe("rendered MP4 container validation", () => {
 
   it("requires file-type, movie, and non-empty media-data boxes", () => {
     const ftyp = box("ftyp", [...brand, 0, 0, 0, 0, ...brand]);
-    const mdat = box("mdat", [1]);
+    const mdat = box("mdat", Array.from({ length: 10 }, () => 1));
     expect(() => validateMp4Container(new Uint8Array([...ftyp, ...mdat]), "video/mp4"))
       .toThrow("missing required MP4");
     const moov = box("moov", box("mvhd", [0]));
