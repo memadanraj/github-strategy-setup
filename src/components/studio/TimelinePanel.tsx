@@ -7,6 +7,11 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { rebuildProjectTimeline, regenerateProjectCaptions } from "@/lib/timeline-operations";
+import {
+  validateTimelineCaptionPatch,
+  validateTimelineClipPatch,
+  validateTimelineSettingsPatch,
+} from "@/lib/timeline-validation";
 
 const db:any = supabase;
 const PX = 72;
@@ -139,20 +144,63 @@ export function TimelinePanel({ project }: { project: Project }) {
   }
 
   async function updateClip(id:string, patch:any) {
-    const r = await db.from("timeline_clips").update({...patch,updated_at:new Date().toISOString()}).eq("id",id);
-    if (r.error) toast.error(r.error.message); else qc.invalidateQueries({queryKey:["timeline_clips",project.id]});
+    const invalid = validateTimelineClipPatch(patch);
+    if (invalid) { toast.error(invalid); return; }
+    try {
+      const r = await db.from("timeline_clips")
+        .update({...patch,updated_at:new Date().toISOString()})
+        .eq("project_id",project.id).eq("id",id)
+        .select("id").maybeSingle();
+      if (r.error) { toast.error(r.error.message); return; }
+      if (!r.data) { toast.error("Clip not found or no longer available."); return; }
+      await qc.invalidateQueries({queryKey:["timeline_clips",project.id]});
+    } catch {
+      toast.error("Could not save the clip. Check your connection and try again.");
+    }
   }
   async function deleteClip(id:string) {
-    const r = await db.from("timeline_clips").delete().eq("id",id);
-    if (r.error) toast.error(r.error.message); else {setSelected(null);refresh();}
+    try {
+      const r = await db.from("timeline_clips").delete()
+        .eq("project_id",project.id).eq("id",id)
+        .select("id").maybeSingle();
+      if (r.error) { toast.error(r.error.message); return; }
+      if (!r.data) { toast.error("Clip not found or no longer available."); return; }
+      setSelected(null);
+      await refresh();
+    } catch {
+      toast.error("Could not delete the clip. Check your connection and try again.");
+    }
   }
   async function updateCaption(id:string, patch:any) {
-    const r = await db.from("captions").update({...patch,updated_at:new Date().toISOString()}).eq("id",id);
-    if (r.error) toast.error(r.error.message); else qc.invalidateQueries({queryKey:["captions",project.id]});
+    const current = captions.find((caption:any) => caption.id === id);
+    if (!current) { toast.error("Caption not found or no longer available."); return; }
+    const invalid = validateTimelineCaptionPatch(patch, current);
+    if (invalid) { toast.error(invalid); return; }
+    try {
+      const r = await db.from("captions")
+        .update({...patch,updated_at:new Date().toISOString()})
+        .eq("project_id",project.id).eq("id",id)
+        .select("id").maybeSingle();
+      if (r.error) { toast.error(r.error.message); return; }
+      if (!r.data) { toast.error("Caption not found or no longer available."); return; }
+      await qc.invalidateQueries({queryKey:["captions",project.id]});
+    } catch {
+      toast.error("Could not save the caption. Check your connection and try again.");
+    }
   }
   async function saveSettings(patch:any) {
-    const r = await db.from("timeline_settings").upsert({project_id:project.id,...patch,updated_at:new Date().toISOString()});
-    if (r.error) toast.error(r.error.message); else qc.invalidateQueries({queryKey:["timeline_settings",project.id]});
+    const invalid = validateTimelineSettingsPatch(patch);
+    if (invalid) { toast.error(invalid); return; }
+    try {
+      const r = await db.from("timeline_settings")
+        .upsert({project_id:project.id,...patch,updated_at:new Date().toISOString()})
+        .select("project_id").single();
+      if (r.error) { toast.error(r.error.message); return; }
+      if (!r.data) { toast.error("Timeline settings could not be confirmed."); return; }
+      await qc.invalidateQueries({queryKey:["timeline_settings",project.id]});
+    } catch {
+      toast.error("Could not save timeline settings. Check your connection and try again.");
+    }
   }
 
   const selectedClip = clips.find((c:any)=>c.id===selected);
