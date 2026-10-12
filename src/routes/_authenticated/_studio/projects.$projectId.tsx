@@ -392,7 +392,7 @@ function Versions({ project }: { project: Tables<"projects"> }) {
   async function snapshot() {
     try {
       const result = await createProjectVersion(
-        (args) => supabase.rpc("create_project_version", args),
+        (args) => supabase.rpc("create_project_version", { _project_id: args._project_id, _label: args._label ?? undefined }),
         project.id,
         label,
       );
