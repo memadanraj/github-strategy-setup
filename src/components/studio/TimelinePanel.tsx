@@ -10,6 +10,7 @@ import { rebuildProjectTimeline, regenerateProjectCaptions } from "@/lib/timelin
 import {
   validateTimelineCaptionPatch,
   validateTimelineClipPatch,
+  type TimelineClipTiming,
   validateTimelineSettingsPatch,
 } from "@/lib/timeline-validation";
 
@@ -144,7 +145,9 @@ export function TimelinePanel({ project }: { project: Project }) {
   }
 
   async function updateClip(id:string, patch:any) {
-    const invalid = validateTimelineClipPatch(patch);
+    const current = clips.find((clip:any) => clip.id === id) as TimelineClipTiming | undefined;
+    if (!current) { toast.error("Clip not found or no longer available."); return; }
+    const invalid = validateTimelineClipPatch(patch, current);
     if (invalid) { toast.error(invalid); return; }
     try {
       const r = await db.from("timeline_clips")

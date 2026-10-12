@@ -1,5 +1,12 @@
 type UnknownRecord = Record<string, unknown>;
 
+export const MAX_TIMELINE_SECONDS = 24 * 60 * 60;
+
+export type TimelineClipTiming = {
+  start_seconds: number;
+  duration_seconds: number;
+};
+
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -13,7 +20,10 @@ function numericField(patch: UnknownRecord, key: string): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-export function validateTimelineClipPatch(patch: unknown): string | null {
+export function validateTimelineClipPatch(
+  patch: unknown,
+  current?: TimelineClipTiming,
+): string | null {
   if (!isRecord(patch) || Object.keys(patch).length === 0) return "No clip changes were provided.";
   const allowed = [
     "start_seconds", "duration_seconds", "source_start_seconds",
@@ -26,11 +36,21 @@ export function validateTimelineClipPatch(patch: unknown): string | null {
     const value = numericField(patch, key);
     if (value === null) return "Clip timing and levels must be finite numbers.";
     if (key === "start_seconds" && value < 0) return "Clip start cannot be negative.";
+    if (key === "start_seconds" && value > MAX_TIMELINE_SECONDS) return "Clip start cannot exceed 24 hours.";
     if (key === "duration_seconds" && value <= 0) return "Clip duration must be greater than zero.";
+    if (key === "duration_seconds" && value > MAX_TIMELINE_SECONDS) return "Clip duration cannot exceed 24 hours.";
     if (key === "source_start_seconds" && value < 0) return "Source start cannot be negative.";
+    if (key === "source_start_seconds" && value > MAX_TIMELINE_SECONDS) return "Source start cannot exceed 24 hours.";
     if (key === "playback_rate" && (value <= 0 || value > 4)) return "Playback rate must be greater than zero and at most 4.";
     if (key === "volume" && (value < 0 || value > 2)) return "Clip volume must be between 0 and 2.";
     if (key === "opacity" && (value < 0 || value > 1)) return "Clip opacity must be between 0 and 1.";
+  }
+
+  const start = "start_seconds" in patch ? numericField(patch, "start_seconds") : current?.start_seconds;
+  const duration = "duration_seconds" in patch ? numericField(patch, "duration_seconds") : current?.duration_seconds;
+  if (start !== undefined && start !== null && duration !== undefined && duration !== null) {
+    if (!Number.isFinite(start) || !Number.isFinite(duration)) return "Clip timing and levels must be finite numbers.";
+    if (start + duration > MAX_TIMELINE_SECONDS) return "Clip end cannot exceed 24 hours.";
   }
 
   for (const key of ["transition_in", "transition_out"]) {
@@ -72,6 +92,9 @@ export function validateTimelineCaptionPatch(
     return "Caption timing must use finite numbers.";
   }
   if (start < 0) return "Caption start cannot be negative.";
+  if (start > MAX_TIMELINE_SECONDS || end > MAX_TIMELINE_SECONDS) {
+    return "Caption timing cannot exceed 24 hours.";
+  }
   if (end <= start) return "Caption end must be after its start.";
   return null;
 }
