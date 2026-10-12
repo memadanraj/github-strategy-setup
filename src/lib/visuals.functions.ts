@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { downloadRemoteMedia, remoteMediaHeaderVariants } from "./remote-media.server";
+import { validateGeneratedClip } from "./mp4-validation";
 import { fetchVisualProvider, readProviderJson, readResponseTextLimited, VisualProviderRequestError } from "./visual-provider-http.server";
 import { normalizeProviderVideoStatus, readProviderJobId, readProviderVideoError, readProviderVideoUrl } from "./video-job-contract";
 import {
@@ -12,6 +13,8 @@ import {
 } from "./visual-job-persistence";
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1";
+
+type DownloadedMedia = { bytes: Buffer; contentType: string };
 
 function gatewayHeaders(apiKey: string, json = true) {
   return {
@@ -56,7 +59,11 @@ function clipSeconds(sceneDuration: number): "4" | "6" | "8" {
   return "8";
 }
 
-async function fetchMediaBytes(url: string, apiKey: string): Promise<Buffer | null> {
+async function fetchMediaBytes(
+  url: string,
+  apiKey: string,
+  allowedContentTypes: readonly string[] = ["image/", "video/", "application/octet-stream"],
+): Promise<DownloadedMedia | null> {
   // Provider-supplied output URLs are untrusted. Never send gateway secrets to
   // arbitrary CDNs or attacker-controlled URLs; credentials are only appropriate
   // for the gateway's own origin.
@@ -73,9 +80,9 @@ async function fetchMediaBytes(url: string, apiKey: string): Promise<Buffer | nu
         headers,
         timeoutMs: 45_000,
         maxBytes: 128 * 1024 * 1024,
-        allowedContentTypes: ["image/", "video/", "application/octet-stream"],
+        allowedContentTypes,
       });
-      return Buffer.from(result.bytes);
+      return { bytes: Buffer.from(result.bytes), contentType: result.contentType };
     } catch {
       // Some provider URLs require gateway credentials. Try both header variants,
       // then allow the caller to use the provider's authenticated content endpoint.
@@ -83,17 +90,17 @@ async function fetchMediaBytes(url: string, apiKey: string): Promise<Buffer | nu
   }
   return null;
 }
-async function fetchVideoContent(jobId: string, apiKey: string): Promise<Buffer> {
+async function fetchVideoContent(jobId: string, apiKey: string): Promise<DownloadedMedia> {
   const result = await downloadRemoteMedia(
     `${GATEWAY}/videos/${encodeURIComponent(jobId)}/content`,
     {
       headers: gatewayHeaders(apiKey, false),
       timeoutMs: 45_000,
       maxBytes: 128 * 1024 * 1024,
-      allowedContentTypes: ["video/", "application/octet-stream"],
+      allowedContentTypes: ["video/mp4", "application/octet-stream"],
     },
   );
-  return Buffer.from(result.bytes);
+  return { bytes: Buffer.from(result.bytes), contentType: result.contentType };
 }
 
 type CheckedVisualAdmin = {
@@ -196,8 +203,8 @@ async function generateImage(apiKey: string, model: string, prompt: string, vert
   }
 
   if (typeof item?.url === "string" && item.url.trim()) {
-    const bytes = await fetchMediaBytes(item.url, apiKey);
-    if (bytes) return bytes;
+    const media = await fetchMediaBytes(item.url, apiKey, ["image/", "application/octet-stream"]);
+    if (media) return media.bytes;
   }
 
   throw new Error("AI returned no downloadable image.");
@@ -559,7 +566,24 @@ export const checkSceneClip = createServerFn({ method: "POST" })
       if (!claimed) return { status: "running" as const };
 
       const url = readProviderVideoUrl(info);
-      const bytes = (url ? await fetchMediaBytes(url, apiKey) : null) ?? (await fetchVideoContent(providerId, apiKey));
+      let media: DownloadedMedia | null = null;
+      if (url) {
+        const candidate = await fetchMediaBytes(url, apiKey, ["video/mp4", "application/octet-stream"]);
+        if (candidate) {
+          try {
+            validateGeneratedClip(candidate.bytes, candidate.contentType);
+            media = candidate;
+          } catch {
+            // A stale/invalid output URL can be returned before the canonical
+            // authenticated content endpoint is ready; try that endpoint next.
+          }
+        }
+      }
+      if (!media) {
+        media = await fetchVideoContent(providerId, apiKey);
+        validateGeneratedClip(media.bytes, media.contentType);
+      }
+      const bytes = media.bytes;
       const sceneId = job.input?.sceneId as string | undefined;
       if (!sceneId) throw new Error("Clip job is missing its scene reference.");
 
