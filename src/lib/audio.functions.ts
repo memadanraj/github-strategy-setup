@@ -192,8 +192,74 @@ export const syncElevenLabsVoices=createServerFn({method:"POST"}).middleware([re
 });
 
 export const cloneVoice=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),assetId:z.string().uuid(),name:z.string().min(2).max(100),description:z.string().max(500).optional(),consentConfirmed:z.literal(true)}).parse(d)).handler(async({data,context})=>{
- const s:any=context.supabase;const a=(await s.from("assets").select("id,storage_path,name,meta").eq("id",data.assetId).eq("project_id",data.projectId).maybeSingle()).data;if(!a?.storage_path)return{ok:false,error:"Voice sample not found."};let id:string;try{id=await job(s,"clone_voice",data.projectId,{assetId:data.assetId,consentConfirmed:true})}catch(e:any){return{ok:false,error:"Couldn't start cloning."}}
- try{const file=await db.storage.from("project-assets").download(a.storage_path);if(file.error)throw new Error("Couldn't read sample");const bytes=Buffer.from(await file.data.arrayBuffer());const r=await voiceProvider("elevenlabs").clone!({name:data.name,description:data.description,file:bytes,filename:a.name,contentType:a.meta?.type||"audio/mpeg"});const c=(await db.from("voice_clones").insert({user_id:context.userId,project_id:data.projectId,source_asset_id:data.assetId,provider:"elevenlabs",provider_voice_id:r.voiceId,name:data.name,consent_confirmed:true,consent_text:"I confirm I have authorization to clone this speaker's voice.",status:r.requiresVerification?"processing":"ready"}).select("id").single()).data;if(!c)throw new Error("Couldn't save clone");await db.from("voices").upsert({provider:"elevenlabs",provider_voice_id:r.voiceId,name:data.name,language:"en",category:"cloned",status:"active",metadata:{clone_id:c.id}},{onConflict:"provider,provider_voice_id"});await doneJob(id,{cloneId:c.id,voiceId:r.voiceId});return{ok:true,cloneId:c.id,voiceId:r.voiceId}}catch(e:any){const message=e instanceof Error?e.message:"Audio generation failed.";const outcome=await failJob(id,message);return{ok:false,error:outcome.completed?"The job completed but its response could not be confirmed. Refresh the project to see the saved result.":outcome.error}}
+ const s:any=context.supabase;
+ const assetResult=await s.from("assets").select("id,storage_path,name,meta").eq("id",data.assetId).eq("project_id",data.projectId).maybeSingle();
+ if(assetResult.error||!assetResult.data?.storage_path)return{ok:false,error:"Voice sample not found."};
+ const asset=assetResult.data;
+ let id:string;
+ try{id=await job(s,"clone_voice",data.projectId,{assetId:data.assetId,consentConfirmed:true})}
+ catch(e:any){return{ok:false,error:"Couldn't start cloning."}}
+
+ let createdVoiceId:string|undefined;
+ let cloneId:string|undefined;
+ let completionAttempted=false;
+ try{
+  const file=await db.storage.from("project-assets").download(asset.storage_path);
+  if(file.error)throw new Error("Couldn't read sample.");
+  const bytes=Buffer.from(await file.data.arrayBuffer());
+  const provider=voiceProvider("elevenlabs");
+  if(!provider.clone)throw new Error("Voice cloning is unavailable.");
+  const clone=await provider.clone({
+   name:data.name,
+   description:data.description,
+   file:bytes,
+   filename:asset.name,
+   contentType:asset.meta?.type||"audio/mpeg"
+  });
+  createdVoiceId=clone.voiceId;
+  const cloneResult=await db.from("voice_clones").insert({
+   user_id:context.userId,
+   project_id:data.projectId,
+   source_asset_id:data.assetId,
+   provider:"elevenlabs",
+   provider_voice_id:clone.voiceId,
+   name:data.name,
+   consent_confirmed:true,
+   consent_text:"I confirm I have authorization to clone this speaker's voice.",
+   status:clone.requiresVerification?"processing":"ready"
+  }).select("id").single();
+  if(cloneResult.error||!cloneResult.data?.id)throw new Error("Couldn't save clone.");
+  cloneId=cloneResult.data.id;
+  const voiceUpsert=await db.from("voices").upsert({
+   provider:"elevenlabs",
+   provider_voice_id:clone.voiceId,
+   name:data.name,
+   language:"en",
+   category:"cloned",
+   status:"active",
+   metadata:{clone_id:cloneId}
+  },{onConflict:"provider,provider_voice_id"});
+  if(voiceUpsert.error)throw new Error("Couldn't register cloned voice.");
+  completionAttempted=true;
+  await doneJob(id,{cloneId,voiceId:clone.voiceId});
+  return{ok:true,cloneId,voiceId:clone.voiceId};
+ }catch(e:any){
+  const message=e instanceof Error?e.message:"Voice cloning failed.";
+  const outcome=await failJob(id,message,{
+   completionMayHaveSucceeded:completionAttempted,
+   cleanupAsset:createdVoiceId?async()=>{
+    const failures:string[]=[];
+    const voiceDelete=await db.from("voices").delete().eq("provider","elevenlabs").eq("provider_voice_id",createdVoiceId);
+    if(voiceDelete.error)failures.push("cloned voice record");
+    const cloneDelete=await db.from("voice_clones").delete().eq("user_id",context.userId).eq("project_id",data.projectId).eq("provider_voice_id",createdVoiceId);
+    if(cloneDelete.error)failures.push("clone record");
+    if(failures.length)throw new Error("Cleanup failed for "+failures.join(" and ")+".");
+   }:undefined
+  });
+  if(outcome.completed&&cloneId&&createdVoiceId)return{ok:true,cloneId,voiceId:createdVoiceId};
+  const providerWarning=createdVoiceId?" The provider may have created a remote voice clone; check the provider console if no clone appears in the app.":"";
+  return{ok:false,error:outcome.error+providerWarning};
+ }
 });
 
 export const generateMusicTrack=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),title:z.string().min(1).max(120),prompt:z.string().min(10).max(1000),durationSeconds:z.number().int().min(3).max(600),genre:z.string().max(80).optional(),mood:z.string().max(80).optional()}).parse(d)).handler(async({data,context})=>{
