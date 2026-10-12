@@ -137,3 +137,11 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - Regression tests cover non-terminal jobs, missing/non-ready exports, failed and cancelled terminal rows with ready exports, lost update responses, and database lookup/write failures.
 - GitHub Actions passed locked dependency installation, lint, TypeScript typecheck, unit/component tests, and production build for commit `6412a320fab769020b99720b1c6f64d4b7443ebf`.
 - This is mocked/unit-level verification. Verify the crash window with staging Postgres/Storage and download/play the actual exported media before production.
+
+
+## Update — Paddle cancellation plan reconciliation (October 12, 2026)
+
+- A cancellation event now confirms the subscription row was actually marked canceled, then recomputes the account plan from any remaining active, trialing, or past-due subscriptions.
+- The webhook no longer automatically sets a user to the free plan when another qualifying subscription remains. Past-due stays eligible to match the current payment-recovery grace-period behavior; if no qualifying subscription remains, the effective plan becomes free.
+- Unit coverage checks multiple subscriptions, grace-period handling, terminal/paused subscriptions, invalid timestamps, and the no-subscription fallback.
+- This remains mocked/unit-level verification. Paddle event ordering and the real subscription lifecycle still require sandbox testing.

@@ -159,3 +159,11 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Structurally invalid output is treated as a permanent render failure, with the job failure state saved and its finalization claim cleared. If saving that state fails, the job remains in a reconciliation-safe state rather than being reported as completed.
 - GitHub Actions for code commit `611893c00bc9826d24d31581e58552a592d8d664` passed lint, TypeScript typecheck, **29 test files**, and production build.
 - The validator checks container structure only. It does not prove codec compatibility, all media samples decode, or that an actual hosted export plays correctly. Those acceptance checks remain a staging gate.
+
+
+## Paddle cancellation entitlement reconciliation — October 12, 2026
+
+- Cancellation handling now verifies that the subscription status write affected a row before changing profile entitlements.
+- After cancellation, the webhook checks for other remaining active, trialing, or past-due subscriptions and applies the newest qualifying plan, falling back to `free` only when no qualifying subscription remains.
+- Regression tests cover multiple plan rows, pending payment recovery, paused/canceled rows, and missing candidates.
+- Staging verification remains required for real Paddle cancellation, renewal, grace-period, and event-order scenarios.
