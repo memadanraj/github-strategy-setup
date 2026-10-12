@@ -2,8 +2,8 @@
 
 This is an evidence-based phase tracker for the master plan. A UI control or source file alone is not proof a feature is complete. `COMPLETE` should be used only after persistence, security, error paths, and relevant tests pass.
 
-**Working branch:** `hardening/phase-5-timeline-editing-ux`  
-**Target:** draft PR, not `main`  
+**Working branch:** `hardening/phase-6-render-export-integrity`  
+**Target:** stacked draft PR; no direct changes to `main`  
 **Status date:** 2026-10-12
 
 | Plan phase | Current status | Evidence / remaining work |
@@ -18,7 +18,7 @@ This is an evidence-based phase tracker for the master plan. A UI control or sou
 | 7. Voice generation | EXISTING / TEST | Voice provider code and UI exist, but live verification requires `ELEVENLABS_API_KEY` and/or supported voice-provider credentials. |
 | 8. Captions | EXISTING / TEST | Caption/transcription model exists; timing, edit, export-format and rendered-caption acceptance tests remain. |
 | 9. Basic editor/timeline | PARTIAL / TEST | Client and DB guardrails cap timeline times at 24 hours. Caption text/time and clip properties now use local drafts plus explicit save actions rather than issuing writes on every keystroke. Unit/component tests cover atomic form saves and retaining edits after a failed save. Migration `0024` still needs a staging existing-row audit and constraint validation; drag/trim/split/undo/redo remain open. |
-| 10. Rendering | PARTIAL | Shotstack and compatible HTTP renderer adapters exist. Clear missing-provider failure and bounded MP4 result download added. Render-provider tests added; end-to-end render/playback and idempotent retry tests remain. |
+| 10. Rendering | PARTIAL / TEST | Render-provider adapters, bounded download and serialized finalization exist. New `mp4-validation.ts` checks allowed media types, the 512 MiB limit, valid top-level box lengths and required `ftyp`/`moov`/non-empty `mdat` boxes before export upload. Structurally invalid output marks the render job failed and releases the finalization claim. Seven MP4 tests pass; real-provider render, codec/decode, playback and staging finalization-race tests remain. |
 | 11. Export and sharing | PARTIAL / TEST | Share links store only SHA-256 token hashes, support optional scrypt password protection, 1/7/30-day or no-expiry links, revocation, a password lockout and temporary signed MP4 playback. Migration `0018`; token/password primitives are unit-tested. Route, storage, expiry, revocation, and migration behavior require staging verification. |
 | 12. Credits | PARTIAL / TEST | Synchronous AI tasks now use `fail_generation_job_checked` instead of the older void failure RPC. Refund wording depends on returned terminal state; `already_complete` plus a persisted result returns success, while unknown settlement triggers reconciliation messaging. Ledger race/concurrency, idempotency and live billing/job integration tests remain. |
 | 13. Billing | PARTIAL | Paddle client, webhook signature/event handling and tables exist. Price IDs and sandbox lifecycle tests remain; legacy Stripe SQL files/migration order need careful reconciliation. |
@@ -147,3 +147,12 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Clip start/duration/source-in/volume remain local while editing; one explicit save sends the complete patch, which is validated against existing clip timing before persistence.
 - Failed saves keep the local draft so the user can correct/retry instead of losing input.
 - CI for code commit `48b25b7e2c3ce86fdd94e21e3480bc0e42d7a40d` passed lint, typecheck, **28 test files**, and production build.
+
+
+## Render/export integrity — October 12, 2026
+
+- Renderer output is now structurally validated before upload to private storage and before an export row can be marked ready.
+- Validation rejects unexpected content types, oversized output, truncated/invalid ISO BMFF boxes, missing file/movie/media-data boxes, and empty media-data boxes.
+- Structurally invalid output is treated as a permanent render failure, with the job failure state saved and its finalization claim cleared. If saving that state fails, the job remains in a reconciliation-safe state rather than being reported as completed.
+- GitHub Actions for code commit `611893c00bc9826d24d31581e58552a592d8d664` passed lint, TypeScript typecheck, **29 test files**, and production build.
+- The validator checks container structure only. It does not prove codec compatibility, all media samples decode, or that an actual hosted export plays correctly. Those acceptance checks remain a staging gate.
