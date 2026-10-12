@@ -1,18 +1,28 @@
 import {createServerFn} from "@tanstack/react-start";
-async function failJob(id:string,msg:string,cleanup:AudioJobFailureCleanup={}) {
- return failAudioJob((name,args)=>db.rpc(name,args),id,msg,cleanup);
-}
-async function doneJob(id:string,out:any) {
- return completeAudioJob((name,args)=>db.rpc(name,args),id,out);
-}
 import {z} from "zod";
 import {createHash} from "node:crypto";
 import {requireSupabaseAuth} from "@/integrations/supabase/auth-middleware";
 import {supabaseAdmin} from "@/integrations/supabase/client.server";
 import {voiceProvider,musicProvider} from "./audio.providers.server";
-import { completeAudioJob, failAudioJob, type AudioJobFailureCleanup } from "./audio-job-settlement";
- const {error}=await db.rpc("complete_generation_job",{_job_id:id,_output:out});
- if(error)throw new Error("Could not finalize the audio generation job.");
+import {completeAudioJob,failAudioJob,type AudioJobFailureCleanup} from "./audio-job-settlement";
+
+const db:any=supabaseAdmin;
+
+async function url(path:string){
+ const {data,error}=await db.storage.from("project-assets").createSignedUrl(path,900);
+ if(error||!data?.signedUrl)throw new Error("Playback URL unavailable.");
+ return data.signedUrl;
+}
+async function job(s:any,slug:string,projectId:string,input:any){
+ const result=await s.rpc("start_generation_job",{_task_slug:slug,_project_id:projectId,_input:input});
+ if(result.error||!result.data)throw new Error(result.error?.message||"Couldn't start generation");
+ return result.data as string;
+}
+async function failJob(id:string,msg:string,cleanup:AudioJobFailureCleanup={}){
+ return failAudioJob((name,args)=>db.rpc(name,args),id,msg,cleanup);
+}
+async function doneJob(id:string,out:any){
+ return completeAudioJob((name,args)=>db.rpc(name,args),id,out);
 }
 
 export const generateSceneVoiceover=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),sceneId:z.string().uuid(),voiceId:z.string().uuid(),instructions:z.string().max(500).optional(),speed:z.number().min(.25).max(4).optional()}).parse(d)).handler(async({data,context})=>{
