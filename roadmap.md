@@ -13,7 +13,7 @@ The repository contains baseline implementations for authentication, dashboard, 
 - [ ] Phase 6 — script/research/hook generation acceptance tests
 - [ ] Phase 7 — image/video generation and safe media persistence (checked asset/scene/job writes, compensating cleanup, bounded provider calls and failure-state tests added; staging verification remains)
 - [ ] Phase 8 — voice/music/SFX and captions acceptance tests
-- [ ] Phase 9 — timeline/editor persistence and interaction tests (24-hour timing, clip-end, transition/text size bounds added at client and DB layers; migration 0024 needs staging audit/constraint validation; drag/trim/split/undo/redo tests remain)
+- [ ] Phase 9 — timeline/editor persistence and interaction tests (24-hour DB/client bounds; explicit-save caption/clip draft forms and failure-preservation tests added; migration 0024 needs staging audit/constraint validation; drag/trim/split/undo/redo tests remain)
 - [ ] Phase 10 — rendering, export integrity, and playback validation
 - [ ] Phase 11 — private/unlisted/password/expiry/revocable share links (token-hashed public export links, optional password, expiration and revocation implemented on branch; staging tests remain)
 - [ ] Phase 12 — credit ledger concurrency, refunds, reconciliation
@@ -34,3 +34,8 @@ Audio routes now check completion/settlement RPC errors and avoid asserting a re
 ### Timeline guardrails (October 12, 2026)
 
 Client validation and migration `0024_timeline_timing_bounds.sql` now cap clip/caption timing at 24 hours, transition values at 80 characters, and caption text at 5,000 characters. CI passes for the code commit; existing staging rows and interaction behavior still require release checks.
+
+
+### Timeline editor interaction (October 12, 2026)
+
+The caption editor and clip inspector now stage field changes locally and persist one combined patch on explicit save. Unit/component tests verify persistence is not triggered on each keystroke and failed saves keep the user's draft. Undo/redo and drag/trim/split acceptance tests remain to be implemented.
