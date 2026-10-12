@@ -130,6 +130,18 @@ export async function runAiTask<T, R>(opts: {
       throw new Error("AI output may have been saved, but completion settlement failed.");
     }
 
+    // The completion RPC is a guarded no-op for already-terminal jobs and returns
+    // no state. Read the persisted state so an RPC without an error is not mistaken
+    // for a successful transition when another request already failed the job.
+    const { data: settledJob, error: stateReadError } = await supabase
+      .from("generation_jobs")
+      .select("status")
+      .eq("id", jobId)
+      .maybeSingle();
+    if (stateReadError || settledJob?.status !== "complete") {
+      throw new Error("AI output may have been saved, but the database did not confirm the job as complete.");
+    }
+
     return { ok: true, value };
   } catch (cause) {
     const message = cause instanceof Error && cause.message.trim()
