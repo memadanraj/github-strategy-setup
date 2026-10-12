@@ -263,6 +263,84 @@ export const cloneVoice=createServerFn({method:"POST"}).middleware([requireSupab
 });
 
 export const generateMusicTrack=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),title:z.string().min(1).max(120),prompt:z.string().min(10).max(1000),durationSeconds:z.number().int().min(3).max(600),genre:z.string().max(80).optional(),mood:z.string().max(80).optional()}).parse(d)).handler(async({data,context})=>{
- const s:any=context.supabase;let id:string;try{id=await job(s,"generate_music",data.projectId,{prompt:data.prompt,durationSeconds:data.durationSeconds})}catch(e:any){return{ok:false,error:"Couldn't start music generation."}}
- try{const a=await musicProvider().compose({prompt:data.prompt,durationMs:data.durationSeconds*1000});const path=`${context.userId}/${data.projectId}/audio/music/${crypto.randomUUID()}.mp3`;const up=await db.storage.from("project-assets").upload(path,a.bytes,{contentType:a.contentType});if(up.error)throw new Error("Couldn't store music");const asset=(await db.from("assets").insert({project_id:data.projectId,kind:"music",name:data.title,storage_path:path,meta:{provider:"elevenlabs",provider_asset_id:a.providerAssetId}}).select("id").single()).data;if(!asset)throw new Error("Couldn't register music asset");const track=(await db.from("music_tracks").insert({project_id:data.projectId,asset_id:asset.id,title:data.title,genre:data.genre,mood:data.mood,duration_seconds:data.durationSeconds,license:"provider-generated",provider:"elevenlabs",provider_asset_id:a.providerAssetId,attribution:"Generated with ElevenLabs Music API"}).select("id").single()).data;await doneJob(id,{trackId:track?.id,assetId:asset.id,path});return{ok:true,trackId:track?.id,url:await url(path)}}catch(e:any){const message=e instanceof Error?e.message:"Audio generation failed.";const outcome=await failJob(id,message);return{ok:false,error:outcome.completed?"The job completed but its response could not be confirmed. Refresh the project to see the saved result.":outcome.error}}
-});
+ const s:any=context.supabase;
+ let id:string;
+ try{id=await job(s,"generate_music",data.projectId,{prompt:data.prompt,durationSeconds:data.durationSeconds})}
+ catch(e:any){return{ok:false,error:"Couldn't start music generation."}}
+
+ let outputPath:string|undefined;
+ let outputAssetId:string|undefined;
+ let outputTrackId:string|undefined;
+ let playbackUrl:string|undefined;
+ let uploadAttempted=false;
+ let assetInsertAttempted=false;
+ let trackInsertAttempted=false;
+ let completionAttempted=false;
+ try{
+  const generated=await musicProvider().compose({prompt:data.prompt,durationMs:data.durationSeconds*1000});
+  outputPath=context.userId+"/"+data.projectId+"/audio/music/"+crypto.randomUUID()+".mp3";
+  uploadAttempted=true;
+  const upload=await db.storage.from("project-assets").upload(outputPath,generated.bytes,{contentType:generated.contentType});
+  if(upload.error)throw new Error("Couldn't store music.");
+
+  assetInsertAttempted=true;
+  const assetResult=await db.from("assets").insert({
+   project_id:data.projectId,
+   kind:"music",
+   name:data.title,
+   storage_path:outputPath,
+   meta:{provider:"elevenlabs",provider_asset_id:generated.providerAssetId}
+  }).select("id").single();
+  if(assetResult.error||!assetResult.data?.id)throw new Error("Couldn't register music asset.");
+  outputAssetId=assetResult.data.id;
+
+  trackInsertAttempted=true;
+  const trackResult=await db.from("music_tracks").insert({
+   project_id:data.projectId,
+   asset_id:outputAssetId,
+   title:data.title,
+   genre:data.genre,
+   mood:data.mood,
+   duration_seconds:data.durationSeconds,
+   license:"provider-generated",
+   provider:"elevenlabs",
+   provider_asset_id:generated.providerAssetId,
+   attribution:"Generated with ElevenLabs Music API"
+  }).select("id").single();
+  if(trackResult.error||!trackResult.data?.id)throw new Error("Couldn't register the music track.");
+  outputTrackId=trackResult.data.id;
+
+  playbackUrl=await url(outputPath);
+  completionAttempted=true;
+  await doneJob(id,{trackId:outputTrackId,assetId:outputAssetId,path:outputPath});
+  return{ok:true,trackId:outputTrackId,url:playbackUrl};
+ }catch(e:any){
+  const message=e instanceof Error?e.message:"Music generation failed.";
+  const outcome=await failJob(id,message,{
+   completionMayHaveSucceeded:completionAttempted,
+   cleanupAsset:outputPath&&(assetInsertAttempted||trackInsertAttempted)?async()=>{
+    const failures:string[]=[];
+    let assetIdForCleanup=outputAssetId;
+    if(!assetIdForCleanup&&assetInsertAttempted){
+     const lookup=await db.from("assets").select("id").eq("project_id",data.projectId).eq("storage_path",outputPath).maybeSingle();
+     if(lookup.error)failures.push("asset lookup");
+     else assetIdForCleanup=lookup.data?.id;
+    }
+    if(trackInsertAttempted&&assetIdForCleanup){
+     const deletedTrack=await db.from("music_tracks").delete().eq("project_id",data.projectId).eq("asset_id",assetIdForCleanup);
+     if(deletedTrack.error)failures.push("music track record");
+    }
+    if(assetInsertAttempted){
+     const deletedAsset=await db.from("assets").delete().eq("project_id",data.projectId).eq("storage_path",outputPath);
+     if(deletedAsset.error)failures.push("music asset record");
+    }
+    if(failures.length)throw new Error("Cleanup failed for "+failures.join(" and ")+".");
+   }:undefined,
+   cleanupUpload:uploadAttempted&&outputPath?async()=>{
+    const removed=await db.storage.from("project-assets").remove([outputPath]);
+    if(removed.error)throw new Error("Uploaded music cleanup failed.");
+   }:undefined
+  });
+  if(outcome.completed&&outputTrackId&&playbackUrl)return{ok:true,trackId:outputTrackId,url:playbackUrl};
+  return{ok:false,error:outcome.error};
+ });
