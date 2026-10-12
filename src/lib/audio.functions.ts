@@ -145,6 +145,7 @@ export const generateSceneVoiceover=createServerFn({method:"POST"}).middleware([
   });
   if(outcome.completed&&outputVoiceoverId&&playbackUrl)return{ok:true,url:playbackUrl,voiceoverId:outputVoiceoverId};
   return{ok:false,error:outcome.error};
+  }
  });
 
 export const previewVoice=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),voiceId:z.string().uuid()}).parse(d)).handler(async({data,context})=>{
