@@ -9,6 +9,7 @@ This repository contains an existing application and integrations at different m
 See:
 - [Current state and known gaps](./CURRENT_STATE.md)
 - [Integration and local setup](./INTEGRATION_SETUP.md)
+- [Staging end-to-end release checklist](./STAGING_E2E_CHECKLIST.md)
 - [Implementation roadmap](./roadmap.md)
 
 ## Requirements
