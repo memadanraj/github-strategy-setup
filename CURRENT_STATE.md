@@ -1,4 +1,4 @@
-# DCXORA — Current State (updated October 11, 2026)
+# DCXORA — Current State (updated October 12, 2026)
 
 This file distinguishes **code present**, **automated checks**, and **live/staging verification**. A green local/CI build does not prove the connected database, payment provider, or AI providers are configured correctly.
 
@@ -50,10 +50,19 @@ These changes live on `hardening/phase-0-security-and-ci` and are **not merged i
 
 The SQL migration history is inconsistent: there are duplicate numeric prefixes (including `0010_*` and `0011_*`), several SQL files are not represented in Drizzle's journal, and the Drizzle schema/snapshot files are not authoritative. Do not blindly run all SQL files by filename order or run schema generation against production.
 
-Migrations `0015` through `0020` contain new functions/tables needed by the implemented branch. They have not been applied/verified against a staging database from this environment. Take a backup, inspect the actual migration ledger and current schema, apply only missing migrations in dependency order in staging, and test RLS/ownership before any deployment.
+Migrations `0015` through `0021` contain new functions/tables needed by the implemented branch. They have not been applied/verified against a staging database from this environment. Take a backup, inspect the actual migration ledger and current schema, apply only missing migrations in dependency order in staging, and test RLS/ownership before any deployment.
 
 A tracked `.env` was removed from the branch tip, but deleting it does not erase the value from Git history. Rotate any real credentials ever committed. This document does not assert which secrets are currently configured.
 
 ## Release gate still open
 
 Do not call the app production-ready until a staging user can sign in, create/edit/restore a project, generate and store scenes/media, produce voice/captions, assemble the timeline, render/download/play a valid MP4, share/revoke an export, and complete Paddle sandbox checkout/refund flows. Repeat with timeouts, malformed provider output, duplicate/out-of-order events, storage failures, concurrent edits, and unauthorized cross-user requests.
+
+
+## Update — media persistence and settlement (October 12, 2026)
+
+- Image generation and asynchronous video-clip persistence now check the asset insert, scene attachment, and job-completion writes instead of ignoring database errors.
+- On a confirmed failed job, media cleanup is attempted and cleanup failures are surfaced. If the settlement call itself cannot be confirmed, media is preserved to avoid deleting a result that may already be complete; the user is told that credit state needs reconciliation instead of being falsely told a refund happened.
+- New migration `0021_checked_visual_job_settlement.sql` adds a service-role-only RPC that returns the observed terminal state and refunds a reservation in the same transaction as marking the job failed.
+- GitHub Actions passed lint, typecheck, tests (**20 test files passed**) and the production build on commit `d20f32f5dbac1152acfb3baca669de8246fc8df7`.
+- The staging database has not been connected from this environment. Migration `0021`, storage cleanup behavior, and provider race/retry cases still require staging verification.

@@ -49,8 +49,9 @@ Additional hardening migrations introduced on this branch:
 - `0018_project_share_links.sql` adds hashed-token share records, password lockout tracking, and server-role-only table access.
 - `0019_atomic_scene_reordering.sql` adds an owner-checked transactional scene-reorder RPC.
 - `0020_atomic_scene_crud.sql` adds owner-checked transactional scene creation and deletion, with position normalization after deletion.
+- `0021_checked_visual_job_settlement.sql` adds a checked, service-role-only failure/refund RPC for image and asynchronous clip workflows. It returns explicit states for refunded failures, failures without reservations, already-failed/complete jobs, missing jobs, and non-active jobs so callers do not assume a refund.
 
-Review and apply `0015` through `0020` in dependency order where they have not already been applied, but only after a database backup and staging schema check. The repository has historical duplicate migration prefixes and an incomplete Drizzle journal, so do not assume numeric file order alone means a generic migration command will apply them correctly. Verify the actual database migration records first.
+Review and apply `0015` through `0021` in dependency order where they have not already been applied, but only after a database backup and staging schema check. The repository has historical duplicate migration prefixes and an incomplete Drizzle journal, so do not assume numeric file order alone means a generic migration command will apply them correctly. Verify the actual database migration records first.
 
 
 
@@ -133,3 +134,6 @@ Keep development, staging, and production databases and credentials separate. Do
 ## 11. What CI does and does not prove
 
 The automated workflow runs the static checks, unit/component tests, and production build on every branch update. It uses placeholder configuration values; it does not make external provider requests or connect to the application's staging database. Current unit coverage includes Paddle signature validation, price/credit calculation, webhook delivery retry decisions, and project-share token/password helpers. These tests do not replace the staging checklist in the sections above.
+
+
+For migration `0021_checked_visual_job_settlement.sql`, verify the `generation_jobs`, `generation_job_events`, `profiles`, and `credit_transactions` schema matches the function's expectations in staging. Test a normal failure/refund, no-reservation failure, duplicate failure call, a completion-vs-failure race, and refund rollback before promoting. Keep the RPC executable only by `service_role`.

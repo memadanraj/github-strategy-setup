@@ -4,7 +4,7 @@ This is an evidence-based phase tracker for the master plan. A UI control or sou
 
 **Working branch:** `hardening/phase-0-security-and-ci`  
 **Target:** draft PR, not `main`  
-**Status date:** 2026-10-11
+**Status date:** 2026-10-12
 
 | Plan phase | Current status | Evidence / remaining work |
 |---|---|---|
@@ -89,7 +89,7 @@ This checklist follows the uploaded plan's order. “Exists” means code is pre
 
 ### Current-head evidence
 
-- GitHub Actions for commit `1097f0e682c580e4fd9f08fac2006923fc902c53` passed lint, TypeScript typecheck, unit/component tests, and production build (18 test files passed).
+- GitHub Actions for commit `d20f32f5dbac1152acfb3baca669de8246fc8df7` passed lint, TypeScript typecheck, unit/component tests, and production build (20 test files passed).
 - New-project and writing-panel failure-path tests pass in CI; scene-breakdown normalization tests pass in CI. The SQL migration itself still requires application and integration verification against a staging Supabase database.
 - No staging Supabase database, live AI provider, render service, or Paddle sandbox has been exercised from this environment.
 
@@ -115,3 +115,7 @@ This checklist follows the uploaded plan's order. “Exists” means code is pre
 ## Credit ledger test coverage
 
 Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use the idempotent `apply_credit_transaction` RPC, invalid amounts and idempotency keys are rejected before database calls, and an RPC failure is returned as an error rather than reported as a successful grant. The SQL procedure and concurrent duplicate-event behavior still require database integration testing.
+
+
+- Media persistence now uses a shared checked-settlement helper. Image/clip paths only report a confirmed refund after the database reports the job failed with a reservation refund (or an already-failed terminal state); settlement uncertainty is explicitly surfaced for reconciliation.
+- Migration `0021_checked_visual_job_settlement.sql` provides a privileged RPC that checks/locks the job, marks it failed, logs the event, restores reserved credits, and returns an explicit state. It is not applied to staging from this environment.
