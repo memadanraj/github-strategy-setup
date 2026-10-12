@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { rebuildProjectTimeline, regenerateProjectCaptions } from "@/lib/timeline-operations";
-import { CaptionCueEditor, ClipInspectorForm } from "@/components/studio/TimelineEditForms";
+import { CaptionCueEditor, ClipInspectorForm, TimelineSettingsForm } from "@/components/studio/TimelineEditForms";
 import {
   validateTimelineCaptionPatch,
   validateTimelineClipPatch,
@@ -195,18 +195,20 @@ export function TimelinePanel({ project }: { project: Project }) {
       return false;
     }
   }
-  async function saveSettings(patch:any) {
+  async function saveSettings(patch:any): Promise<boolean> {
     const invalid = validateTimelineSettingsPatch(patch);
-    if (invalid) { toast.error(invalid); return; }
+    if (invalid) { toast.error(invalid); return false; }
     try {
       const r = await db.from("timeline_settings")
         .upsert({project_id:project.id,...patch,updated_at:new Date().toISOString()})
         .select("project_id").single();
-      if (r.error) { toast.error(r.error.message); return; }
-      if (!r.data) { toast.error("Timeline settings could not be confirmed."); return; }
+      if (r.error) { toast.error(r.error.message); return false; }
+      if (!r.data) { toast.error("Timeline settings could not be confirmed."); return false; }
       await qc.invalidateQueries({queryKey:["timeline_settings",project.id]});
+      return true;
     } catch {
       toast.error("Could not save timeline settings. Check your connection and try again.");
+      return false;
     }
   }
 
@@ -305,7 +307,7 @@ function CaptionEditor({captions,selected,onSelect,onUpdate}:{captions:any[];sel
 
 function Inspector({clip,caption,settings,onClipUpdate,onClipDelete,onCaptionUpdate,onSettings}:{clip:any;caption:any;settings:any;onClipUpdate:(id:string,p:any)=>Promise<boolean>;onClipDelete:(id:string)=>void;onCaptionUpdate:(id:string,p:any)=>Promise<boolean>;onSettings:(p:any)=>void}) {
   if (caption) return <section className="rounded-2xl border border-border bg-surface p-4"><p className="font-mono text-xs text-muted-foreground">CAPTION INSPECTOR</p><h3 className="mt-1 font-semibold">Cue styling</h3><div className="mt-4 grid gap-2"><select value={caption.position} onChange={e=>onCaptionUpdate(caption.id,{position:e.target.value})} className="h-9 rounded-md border border-border bg-surface px-2 text-sm"><option value="bottom">Bottom</option><option value="center">Center</option><option value="top">Top</option></select><p className="text-xs text-muted-foreground">Caption text and timing remain editable in the cue list.</p></div></section>;
-  if (!clip) return <section className="rounded-2xl border border-border bg-surface p-4"><p className="font-mono text-xs text-muted-foreground">PROJECT SETTINGS</p><h3 className="mt-1 font-semibold">Timeline</h3><div className="mt-4 grid grid-cols-2 gap-2"><label className="text-xs text-muted-foreground">FPS<select value={settings?.fps||30} onChange={e=>onSettings({fps:Number(e.target.value)})} className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"><option>24</option><option>25</option><option>30</option><option>50</option><option>60</option></select></label><label className="text-xs text-muted-foreground">Grid<input className="mt-1 h-9 w-full rounded-md border border-border bg-surface px-2 text-sm" type="number" min=".1" max="10" step=".1" value={settings?.grid_seconds||1} onChange={e=>onSettings({grid_seconds:Number(e.target.value)})}/></label></div><p className="mt-3 text-xs text-muted-foreground">These settings are consumed by the future render/export phase.</p></section>;
+  if (!clip) return <TimelineSettingsForm settings={settings} onSave={onSettings} />;
   return <ClipInspectorForm clip={clip} onSave={onClipUpdate} onDelete={onClipDelete} />;
 }
 function PreviewImage({path}:{path:string}){const {data}=useQuery({queryKey:["timeline_preview",path],queryFn:async()=>{const r=await supabase.storage.from("project-assets").createSignedUrl(path,300);return r.data?.signedUrl||null}});return data?<img src={data} className="size-full object-contain" alt="Scene preview"/>:<div className="flex size-full items-center justify-center text-white/50">Loading…</div>}
