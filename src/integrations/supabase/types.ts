@@ -1580,6 +1580,10 @@ export type Database = {
         Args: { _project_id: string; _scene_id: string }
         Returns: boolean
       }
+      fail_generation_job_checked: {
+        Args: { _error: string; _job_id: string }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"

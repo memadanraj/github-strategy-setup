@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { downloadRemoteMedia, remoteMediaHeaderVariants } from "./remote-media.server";
 import { normalizeProviderVideoStatus, readProviderJobId, readProviderVideoError, readProviderVideoUrl } from "./video-job-contract";
+import { persistGeneratedVisual } from "./visual-job-persistence";
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1";
 
@@ -197,61 +198,100 @@ async function runVisualJob(opts: {
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-  try {
-    const apiKey = process.env["LOVABLE_API_KEY"];
-    if (!apiKey) throw new Error("AI is not configured");
+  const persistence = await persistGeneratedVisual({
+    prepare: async () => {
+      const apiKey = process.env["LOVABLE_API_KEY"];
+      if (!apiKey) throw new Error("AI is not configured");
 
-    const out = await opts.work({
-      project: ctx.project,
-      characters: ctx.characters,
-      scene,
-      apiKey,
-      model:
-        task?.model ??
-        (opts.taskSlug === "generate_image"
-          ? "openai/gpt-image-2"
-          : "google/veo-3.1-lite"),
-    });
+      const out = await opts.work({
+        project: ctx.project,
+        characters: ctx.characters,
+        scene,
+        apiKey,
+        model:
+          task?.model ??
+          (opts.taskSlug === "generate_image"
+            ? "openai/gpt-image-2"
+            : "google/veo-3.1-lite"),
+      });
+      return {
+        ...out,
+        path: `${ctx.project.user_id}/${opts.projectId}/${crypto.randomUUID()}.${out.ext}`,
+      };
+    },
+    upload: async (out) => {
+      const { error } = await supabaseAdmin.storage
+        .from("project-assets")
+        .upload(out.path, out.bytes, { contentType: out.contentType });
+      if (error) throw new Error("Couldn't store the generated file.");
+    },
+    registerAsset: async (out) => {
+      const { data: asset, error } = await supabaseAdmin
+        .from("assets")
+        .insert({
+          project_id: opts.projectId,
+          kind: out.kind,
+          name: `${scene.title} — AI ${out.kind}`,
+          storage_path: out.path,
+          meta: { ai: true, task: opts.taskSlug, scene_id: opts.sceneId },
+        })
+        .select("id")
+        .single();
+      if (error || !asset?.id) throw new Error("Couldn't register the generated asset.");
+      return asset.id as string;
+    },
+    attachScene: async (out) => {
+      const { data: attached, error } = await supabaseAdmin
+        .from("scenes")
+        .update(out.kind === "image" ? { image_path: out.path } : { clip_path: out.path })
+        .eq("id", opts.sceneId)
+        .eq("project_id", opts.projectId)
+        .select("id")
+        .single();
+      if (error || !attached?.id) throw new Error("Couldn't attach the generated file to its scene.");
+    },
+    completeJob: async (out, assetId) => {
+      const { error } = await supabaseAdmin.rpc("complete_generation_job", {
+        _job_id: jobId,
+        _output: { path: out.path, asset_id: assetId, scene_id: opts.sceneId, task: opts.taskSlug },
+      });
+      if (error) throw new Error("Couldn't finalize the AI generation job.");
+    },
+    cleanupAsset: async (out) => {
+      const { error } = await supabaseAdmin
+        .from("assets")
+        .delete()
+        .eq("project_id", opts.projectId)
+        .eq("storage_path", out.path);
+      if (error) throw new Error("Asset-record cleanup failed.");
+    },
+    cleanupUpload: async (out) => {
+      const { error } = await supabaseAdmin.storage.from("project-assets").remove([out.path]);
+      if (error) throw new Error("Uploaded-file cleanup failed.");
+    },
+    failJob: async (message) => {
+      const { data, error } = await supabaseAdmin.rpc("fail_generation_job_checked", {
+        _job_id: jobId,
+        _error: message.slice(0, 500),
+      });
+      if (error) throw new Error("Couldn't confirm AI job settlement.");
+      const allowedStates = [
+        "failed_refunded",
+        "failed_without_reservation",
+        "already_failed",
+        "already_complete",
+        "not_found",
+        "not_active",
+      ];
+      if (typeof data !== "string" || !allowedStates.includes(data)) {
+        throw new Error("AI job settlement returned an unknown state.");
+      }
+      return data as import("./visual-job-persistence").VisualJobFailureState;
+    },
+  });
 
-    const path = `${ctx.project.user_id}/${opts.projectId}/${crypto.randomUUID()}.${out.ext}`;
-
-    const up = await supabaseAdmin.storage
-      .from("project-assets")
-      .upload(path, out.bytes, { contentType: out.contentType });
-
-    if (up.error) throw new Error("Couldn't store the generated file");
-
-    const name = `${scene.title} — AI ${out.kind}`;
-    const { error: ae } = await supabaseAdmin.from("assets").insert({
-      project_id: opts.projectId,
-      kind: out.kind,
-      name,
-      storage_path: path,
-      meta: { ai: true, task: opts.taskSlug, scene_id: opts.sceneId },
-    });
-
-    if (ae) throw new Error("Couldn't register the asset");
-
-    await supabaseAdmin
-      .from("scenes")
-      .update(out.kind === "image" ? { image_path: path } : { clip_path: path })
-      .eq("id", opts.sceneId);
-
-    await supabaseAdmin.rpc("complete_generation_job", {
-      _job_id: jobId,
-      _output: { path },
-    });
-
-    return { ok: true as const, path };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "AI generation failed";
-    console.error(`${opts.taskSlug} failed`, e);
-    await supabaseAdmin.rpc("fail_generation_job", {
-      _job_id: jobId,
-      _error: msg,
-    });
-    return { ok: false as const, error: `${msg} Your credits were refunded.` };
-  }
+  if (!persistence.ok) return { ok: false as const, error: persistence.error };
+  return { ok: true as const, path: persistence.output.path };
 }
 
 export const generateSceneImage = createServerFn({ method: "POST" })
