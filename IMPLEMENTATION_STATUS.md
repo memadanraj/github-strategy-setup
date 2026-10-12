@@ -2,7 +2,7 @@
 
 This is an evidence-based phase tracker for the master plan. A UI control or source file alone is not proof a feature is complete. `COMPLETE` should be used only after persistence, security, error paths, and relevant tests pass.
 
-**Working branch:** `hardening/phase-12-scene-job-settlement`  
+**Working branch:** `hardening/phase-13-render-recovery`  
 **Target:** stacked draft PR; no direct changes to `main`  
 **Status date:** 2026-10-12
 
@@ -49,6 +49,7 @@ Do not claim production readiness until a staging user can sign up, create a pro
 - Provider HTTP tests cover timeout/network mapping, timeout bounds, limited chunked response reads, oversized `Content-Length`, malformed JSON and empty responses. Synchronous AI settlement tests cover lost completion responses and checked refund states. Code commit `3f89c3a3e830fcef99c0c0ce6426ac597ccec6bf` passed CI; live database/provider behavior remains unverified.
 - Generated clip persistence now validates MIME and MP4 container structure before uploading or registering media. Invalid output URLs are discarded and the authenticated provider-content endpoint is tried before the job enters checked failure/refund settlement. Commit `39ea7296a822d7b3869494b35e72cdf6e4d888f0` passed locked dependency install, lint, typecheck, unit/component tests, and production build; real provider media/codec playback remains a staging gate.
 - Scene drafting now delegates to `runAiTask` instead of using legacy unchecked completion/failure RPC calls. The shared runner can compensate persisted output after a confirmed failed settlement; AI and visual error handling no longer infers a confirmed refund merely from an `already_failed` state. Commit `c46a58336fa825cee2e67a9ea1b2e775bfc039c2` passed locked dependency install, lint, typecheck, unit/component tests, and production build. Live AI/database concurrency and rollback behavior remain unverified outside staging.
+- Render-job polling now repairs the stale terminal-state case when an export row is already `ready` but the render job still says `failed` or `cancelled`. Recovery updates the job to completed and re-reads state if the update response may have been lost; it does not infer success without a ready export. Commit `6412a320fab769020b99720b1c6f64d4b7443ebf` passed CI. Real storage/database race and browser playback checks remain a staging requirement.
 
 
 ## Master plan — exact implementation order and gates
@@ -75,7 +76,7 @@ This checklist follows the uploaded plan's order. “Exists” means code is pre
 | 16 | Voice generation | EXISTING / TEST | Provider success/failure, preview, cloning consent, timeout, and credit refund tests. |
 | 17 | Captions | EXISTING / TEST | Timing bounds, editing persistence, transcript failure, and render/export format tests. |
 | 18 | Timeline | EXISTING / TEST | Drag/trim/split/order, undo/redo, reload persistence, and invalid duration tests. |
-| 19 | Rendering | PARTIAL / TEST | Queue, provider status, timeout/retry/cancel, valid output, and job/asset consistency tests. |
+| 19 | Rendering | PARTIAL / TEST | Queue, provider status, timeout/retry/cancel, valid output, and job/asset consistency tests. `getRenderJob` now reconciles a failed/cancelled row to completed only when a ready export is confirmed, covering the crash window after export persistence but before final job-status persistence. Mocked regression tests pass; SQL/RLS/concurrent staging behavior and playable exports still require acceptance testing. |
 | 20 | Export | PARTIAL / TEST | Export integrity, signed download expiry, missing file, MIME type, and playback tests. |
 | 21 | Share links | PARTIAL / TEST | Owner-only create/list/revoke for ready exports; hashed random tokens; optional password hashes; expiry; failed-password lockout; public playback of only the selected export. Token/password unit tests pass. Staging RLS, expiry, revocation, and signed-URL behavior remains unverified. |
 | 22 | Credits | EXISTING / TEST | Race-safe ledger, duplicate events, actual-cost reconciliation, refunds, and audit history. |

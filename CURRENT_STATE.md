@@ -26,7 +26,7 @@ This file distinguishes **code present**, **automated checks**, and **live/stagi
 | Asset uploads | Implemented in branch | File validation and cleanup paths are unit-tested; storage policies, orphan cleanup, and cross-user isolation need staging tests |
 | Async video clips | Partial | Provider job IDs/status/output are normalized; download is bounded; media MIME and MP4 box structure are validated before storage; invalid output URLs fall back to the authenticated content endpoint. Live provider timeout/retry/cancel/asset linking, codec compatibility and playback remain untested |
 | Voice/music/captions/timeline | Existing UI/code | Live provider output, timed captions, editor persistence/undo/redo need acceptance tests |
-| Rendering and exports | Partial | Provider adapter and failure tests exist; real MP4 render/download/playback and retry tests remain |
+| Rendering and exports | Partial | Provider adapter and failure tests exist; render polling now reconciles failed/cancelled jobs when a ready export was persisted before a lost final-state update. Real MP4 render/download/playback, database races and provider retry behavior still require staging tests |
 | Share links | Implemented in branch | Hashed tokens, optional password, expiry/revoke, lockout, and short-lived signed export URLs; migration `0018` and live access controls need staging checks |
 | Paddle billing | Partial | Signature, price mapping, webhook delivery and credit-ledger wrappers have unit tests; sandbox checkout/subscription/renewal/cancel/refund remains unverified |
 | Admin and YouTube | Existing/partial | Role denial/audit testing and Google OAuth/publishing with staging credentials remain |
@@ -128,3 +128,12 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - `already_failed` alone no longer produces a definitive “credits refunded” claim in shared AI/visual settlement messages. The clip poller's pre-existing failed-job response also no longer appends an unconditional refund claim.
 - GitHub Actions passed locked dependency installation, lint, TypeScript typecheck, unit/component tests, and production build for commit `c46a58336fa825cee2e67a9ea1b2e775bfc039c2`.
 - This is mocked/unit-level verification. Real provider calls, database failure races, and compensation behavior still require staging validation.
+
+
+## Update — recovery of persisted render exports (October 12, 2026)
+
+- Render status polling now checks whether a failed/cancelled render already has an export row marked `ready` before returning the terminal state unchanged.
+- If a ready export exists, the server attempts to reconcile the render job to `completed`; if the update response is uncertain, it reloads the job before reporting recovery. If export lookup or status reconciliation fails, it surfaces an explicit reconciliation error rather than silently masking the discrepancy.
+- Regression tests cover non-terminal jobs, missing/non-ready exports, failed and cancelled terminal rows with ready exports, lost update responses, and database lookup/write failures.
+- GitHub Actions passed locked dependency installation, lint, TypeScript typecheck, unit/component tests, and production build for commit `6412a320fab769020b99720b1c6f64d4b7443ebf`.
+- This is mocked/unit-level verification. Verify the crash window with staging Postgres/Storage and download/play the actual exported media before production.
