@@ -5,6 +5,7 @@ import { downloadRemoteMedia, remoteMediaHeaderVariants } from "./remote-media.s
 import { fetchVisualProvider, readProviderJson, readResponseTextLimited, VisualProviderRequestError } from "./visual-provider-http.server";
 import { normalizeProviderVideoStatus, readProviderJobId, readProviderVideoError, readProviderVideoUrl } from "./video-job-contract";
 import {
+  cleanupGeneratedMediaRecords,
   persistGeneratedVisual,
   settleVisualJobFailure,
   type VisualJobFailureState,
@@ -314,20 +315,25 @@ async function runVisualJob(opts: {
     },
     cleanupAsset: async (out) => {
       const sceneColumn = out.kind === "image" ? "image_path" : "clip_path";
-      const sceneCleanup = await supabaseAdmin
-        .from("scenes")
-        .update(out.kind === "image" ? { image_path: null } : { clip_path: null })
-        .eq("id", opts.sceneId)
-        .eq("project_id", opts.projectId)
-        .eq(sceneColumn, out.path);
-      if (sceneCleanup.error) throw new Error("Scene media reference cleanup failed.");
-
-      const { error } = await supabaseAdmin
-        .from("assets")
-        .delete()
-        .eq("project_id", opts.projectId)
-        .eq("storage_path", out.path);
-      if (error) throw new Error("Asset-record cleanup failed.");
+      await cleanupGeneratedMediaRecords({
+        clearSceneReference: async () => {
+          const sceneCleanup = await supabaseAdmin
+            .from("scenes")
+            .update(out.kind === "image" ? { image_path: null } : { clip_path: null })
+            .eq("id", opts.sceneId)
+            .eq("project_id", opts.projectId)
+            .eq(sceneColumn, out.path);
+          if (sceneCleanup.error) throw new Error("Scene media reference cleanup failed.");
+        },
+        deleteAssetRecord: async () => {
+          const { error } = await supabaseAdmin
+            .from("assets")
+            .delete()
+            .eq("project_id", opts.projectId)
+            .eq("storage_path", out.path);
+          if (error) throw new Error("Asset-record cleanup failed.");
+        },
+      });
     },
     cleanupUpload: async (out) => {
       const { error } = await supabaseAdmin.storage.from("project-assets").remove([out.path]);
@@ -619,12 +625,25 @@ export const checkSceneClip = createServerFn({ method: "POST" })
             completionMayHaveSucceeded: completionStarted && sceneAttached && Boolean(assetId),
             cleanupAsset: assetRegistrationAttempted
               ? async () => {
-                  const { error } = await supabaseAdmin
-                    .from("assets")
-                    .delete()
-                    .eq("project_id", job.project_id)
-                    .eq("storage_path", path);
-                  if (error) throw new Error("Asset record cleanup failed.");
+                  await cleanupGeneratedMediaRecords({
+                    clearSceneReference: async () => {
+                      const { error } = await supabaseAdmin
+                        .from("scenes")
+                        .update({ clip_path: null })
+                        .eq("id", sceneId)
+                        .eq("project_id", job.project_id)
+                        .eq("clip_path", path);
+                      if (error) throw new Error("Scene clip reference cleanup failed.");
+                    },
+                    deleteAssetRecord: async () => {
+                      const { error } = await supabaseAdmin
+                        .from("assets")
+                        .delete()
+                        .eq("project_id", job.project_id)
+                        .eq("storage_path", path);
+                      if (error) throw new Error("Asset record cleanup failed.");
+                    },
+                  });
                 }
               : undefined,
             cleanupUpload: uploadAttempted

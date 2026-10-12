@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  cleanupGeneratedMediaRecords,
   persistGeneratedVisual,
   settleVisualJobFailure,
   type VisualJobFailureState,
@@ -31,6 +32,26 @@ function makeOperations(overrides: Partial<{
   };
   return { operations, output };
 }
+
+describe("generated media cleanup ordering", () => {
+  it("clears the scene reference before deleting the asset record", async () => {
+    const calls: string[] = [];
+    await cleanupGeneratedMediaRecords({
+      clearSceneReference: async () => { calls.push("clear-scene"); },
+      deleteAssetRecord: async () => { calls.push("delete-asset"); },
+    });
+    expect(calls).toEqual(["clear-scene", "delete-asset"]);
+  });
+
+  it("does not delete the asset record when scene-reference cleanup fails", async () => {
+    const deleteAssetRecord = vi.fn(async () => undefined);
+    await expect(cleanupGeneratedMediaRecords({
+      clearSceneReference: async () => { throw new Error("scene update failed"); },
+      deleteAssetRecord,
+    })).rejects.toThrow("scene update failed");
+    expect(deleteAssetRecord).not.toHaveBeenCalled();
+  });
+});
 
 describe("checked visual-job settlement", () => {
   it("preserves media when the database confirms completion after a lost response", async () => {
