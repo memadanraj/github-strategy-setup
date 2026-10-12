@@ -859,6 +859,7 @@ export type Database = {
         Row: {
           created_at: string
           error: string | null
+          finalization_started_at: string | null
           finished_at: string | null
           id: string
           input_manifest: Json
@@ -875,6 +876,7 @@ export type Database = {
         Insert: {
           created_at?: string
           error?: string | null
+          finalization_started_at?: string | null
           finished_at?: string | null
           id?: string
           input_manifest?: Json
@@ -891,6 +893,7 @@ export type Database = {
         Update: {
           created_at?: string
           error?: string | null
+          finalization_started_at?: string | null
           finished_at?: string | null
           id?: string
           input_manifest?: Json
@@ -1574,6 +1577,10 @@ export type Database = {
       }
       create_project_scene: {
         Args: { _project_id: string; _title: string }
+        Returns: string
+      }
+      claim_render_job_finalization: {
+        Args: { _job_id: string }
         Returns: string
       }
       delete_project_scene: {
