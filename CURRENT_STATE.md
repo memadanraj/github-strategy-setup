@@ -166,3 +166,11 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 
 
 - CI run [38405640071](https://github.com/memadanraj/github-strategy-setup/actions/runs/38405640071) passed lint, TypeScript type-check, all **31 test files / 258 tests**, and production build on code commit `be9c9c8c7d45778d4607c178e7ed1a6762189fbb`. Existing warning-level lint findings and empty-link warnings remain. Live provider, storage, database and playable-media checks remain staging-only release gates.
+
+
+## Update — YouTube project ownership guard (October 13, 2026)
+
+- YouTube publishing previously used the admin client to load a private export and create a publication record based only on caller-supplied project/export IDs. The handler now first verifies the project through the caller's authenticated Supabase client and explicitly matches both project ID and user ID.
+- Missing projects, cross-user IDs, database errors, and thrown lookup failures are denied before token refresh, export access, or YouTube upload begins.
+- Added unit coverage for allowed owner lookup, absent project, lookup error/throw, mismatched IDs, and missing identity. No database migration was added.
+- Staging verification with two separate users and YouTube sandbox/test channels remains required.

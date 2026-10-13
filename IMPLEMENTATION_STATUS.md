@@ -188,3 +188,10 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 
 
 - Verification evidence: [CI run 38405640071](https://github.com/memadanraj/github-strategy-setup/actions/runs/38405640071) passed lint, type-check, **31 test files / 258 tests**, and production build for code commit `be9c9c8c7d45778d4607c178e7ed1a6762189fbb`. Warning-level lint and empty-link findings remain but did not fail CI. Staging provider/storage/MP4 playback acceptance is still blocked pending real credentials and an isolated environment.
+
+
+## YouTube publishing ownership check — October 13, 2026
+
+- Added a fail-closed ownership guard before the service-role client accesses an export or creates a YouTube publication. The lookup runs with the authenticated request-scoped Supabase client and filters by both the requested project ID and signed-in user ID.
+- Tests cover owned, absent, mismatched, error, thrown-lookup, and missing-identity cases. The guard rejects unauthorized requests before any YouTube API operation or publication insert.
+- No schema migration was added. Confirm cross-user rejection in staging with two distinct test accounts before release.
