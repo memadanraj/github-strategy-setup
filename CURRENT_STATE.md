@@ -155,3 +155,11 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - No migration was added. The implementation still relies on the existing `generation_jobs` state and checked failure-settlement RPC.
 - CI run [38404696357](https://github.com/memadanraj/github-strategy-setup/actions/runs/38404696357) passed lint, TypeScript type-check, all **30 test files / 254 tests**, and the production build on code commit `45c95f7f4efe4f5cdc2e469d4b9a5d5396596562`.
 - The run still reports inherited warning-level lint findings and existing empty-link warnings. Live provider/storage/database fault-injection and audio playback verification remain part of the staging release gate.
+
+
+## Update — visual completion confirmation (October 13, 2026)
+
+- Image and clip generation no longer treat a no-error `complete_generation_job` response as proof of success; both confirm `generation_jobs.status = complete` before returning success.
+- The shared completion helper is now used by audio and visual job paths, keeping their success criteria consistent. Failed or unreadable states flow through the existing checked failure-settlement logic.
+- Added regression tests for successful completion, a no-op RPC on an already-failed job, missing/nonterminal state, and RPC errors.
+- No migration was added. Real provider/storage behavior and MP4 playback remain staging gates.

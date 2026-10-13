@@ -11,6 +11,7 @@ import {
   settleVisualJobFailure,
   type VisualJobFailureState,
 } from "./visual-job-persistence";
+import { completeGenerationJobAndConfirm } from "./generation-job-completion";
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1";
 
@@ -134,6 +135,35 @@ async function failVisualJobChecked(
     throw new Error("Generation job settlement returned an unknown state.");
   }
   return data as VisualJobFailureState;
+}
+
+async function completeVisualGenerationJob(
+  admin: any,
+  jobId: string,
+  output: unknown,
+  completionErrorMessage: string,
+) {
+  await completeGenerationJobAndConfirm({
+    jobId,
+    output,
+    jobLabel: "visual",
+    completionErrorMessage,
+    complete: async (checkedJobId, checkedOutput) => {
+      const { error } = await admin.rpc("complete_generation_job", {
+        _job_id: checkedJobId,
+        _output: checkedOutput,
+      });
+      return { error };
+    },
+    readStatus: async (checkedJobId) => {
+      const { data, error } = await admin
+        .from("generation_jobs")
+        .select("status")
+        .eq("id", checkedJobId)
+        .maybeSingle();
+      return { data: data ? { status: String(data.status) } : null, error };
+    },
+  });
 }
 
 async function buildVisualContext(supabase: any, projectId: string) {
@@ -314,11 +344,12 @@ async function runVisualJob(opts: {
       if (error || !attached?.id) throw new Error("Couldn't attach the generated file to its scene.");
     },
     completeJob: async (out, assetId) => {
-      const { error } = await supabaseAdmin.rpc("complete_generation_job", {
-        _job_id: jobId,
-        _output: { path: out.path, asset_id: assetId, scene_id: opts.sceneId, task: opts.taskSlug },
-      });
-      if (error) throw new Error("Couldn't finalize the AI generation job.");
+      await completeVisualGenerationJob(
+        supabaseAdmin,
+        jobId,
+        { path: out.path, asset_id: assetId, scene_id: opts.sceneId, task: opts.taskSlug },
+        "Couldn't finalize the AI generation job.",
+      );
     },
     cleanupAsset: async (out) => {
       const sceneColumn = out.kind === "image" ? "image_path" : "clip_path";
@@ -635,11 +666,12 @@ export const checkSceneClip = createServerFn({ method: "POST" })
         sceneAttached = true;
 
         completionStarted = true;
-        const { error: completionError } = await supabaseAdmin.rpc(
-          "complete_generation_job",
-          { _job_id: job.id, _output: { path, asset_id: assetId, provider_job_id: providerId } },
+        await completeVisualGenerationJob(
+          supabaseAdmin,
+          job.id,
+          { path, asset_id: assetId, provider_job_id: providerId },
+          "Couldn't finalize the clip job.",
         );
-        if (completionError) throw new Error("Couldn't finalize the clip job.");
       } catch (persistError) {
         const message = persistError instanceof Error ? persistError.message : "Clip persistence failed.";
         const outcome = await settleVisualJobFailure(

@@ -90,3 +90,10 @@ Mark every step `PASS`, `FAIL`, or `BLOCKED` with evidence. Do not call the app 
 - [ ] Simulate `complete_generation_job` returning no error while the row is already `failed` (guarded no-op). Confirm the request does not report audio generation success and checked settlement/cleanup runs safely.
 - [ ] Confirm a successful completion is returned only after a status read verifies `generation_jobs.status = complete`.
 - [ ] Make the status read unavailable after a successful RPC response. Confirm the handler does not claim success; retry/checked settlement determines whether output should be preserved or cleaned up.
+
+
+### Visual completion state regression
+
+- [ ] Simulate `complete_generation_job` returning no error while an image or clip job is already `failed`. Confirm the handler does not report success and the checked settlement path safely reconciles output/credits.
+- [ ] Confirm both image and clip paths return success only after `generation_jobs.status = complete` is read from the database.
+- [ ] Make the status read unavailable immediately after the completion RPC. Confirm the job's checked failure-settlement outcome determines whether output is preserved or compensated; do not delete output when the terminal state is uncertain.

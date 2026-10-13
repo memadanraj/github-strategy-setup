@@ -177,3 +177,11 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Regression tests exercise no-op completion on an already-failed job and an unavailable/unknown state read. No schema migration is needed.
 - CI run [38404696357](https://github.com/memadanraj/github-strategy-setup/actions/runs/38404696357) passed lint, TypeScript type-check, all **30 test files / 254 tests**, and production build for code commit `45c95f7f4efe4f5cdc2e469d4b9a5d5396596562`.
 - Inherited warning-level lint findings and empty-link warnings remain; they did not fail CI. Staging verification is still required for voiceover, preview, cloning, music flows, storage failures, and lost completion responses.
+
+
+## Visual completion state verification — October 13, 2026
+
+- Added a shared checked-completion helper and refactored audio completion to use it. Image generation and clip persistence now use the same helper after their void completion RPCs.
+- The helper checks the persisted `generation_jobs.status` and accepts only `complete`; failed, nonterminal, missing, or unreadable states become errors handled by the existing checked failure-settlement/compensation path.
+- New unit coverage verifies the state-confirmation contract, including a successful RPC that is a no-op because the job was already failed. No schema migration is needed.
+- Staging verification remains required for generated images, provider-backed clips, storage fault injection, and real clip playback/decoding.
