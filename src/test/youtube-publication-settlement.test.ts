@@ -39,7 +39,7 @@ describe("YouTube publication partial-failure settlement", () => {
       thumbnailUploaded: false,
       persist,
     });
-    expect(result.kind).toBe("reconciliation");
+    if (result.kind !== "reconciliation") throw new Error("Expected reconciliation outcome.");
     expect(result.message).toContain("check your YouTube channel before retrying");
     expect(persist).toHaveBeenCalledWith(expect.objectContaining({ status: "uploading" }));
     expect(persist).not.toHaveBeenCalledWith(expect.objectContaining({ status: "failed" }));
@@ -66,7 +66,7 @@ describe("YouTube publication partial-failure settlement", () => {
       thumbnailUploaded: false,
       persist,
     });
-    expect(result.kind).toBe("reconciliation");
+    if (result.kind !== "reconciliation") throw new Error("Expected reconciliation outcome.");
     expect(result.message).toContain("Do not upload it again yet");
     expect(persist).toHaveBeenCalledWith(expect.objectContaining({ status: "published", youtube_video_id: video.id }));
   });
@@ -79,7 +79,8 @@ describe("YouTube publication partial-failure settlement", () => {
       thumbnailUploaded: true,
       persist: async () => { throw new Error("network failure"); },
     });
-    expect(result).toMatchObject({ kind: "reconciliation", videoId: video.id, url: video.url });
+    if (result.kind !== "reconciliation") throw new Error("Expected reconciliation outcome.");
+    expect(result).toMatchObject({ videoId: video.id, url: video.url });
     expect(result.message).toContain(video.id);
   });
 });
