@@ -97,3 +97,10 @@ Mark every step `PASS`, `FAIL`, or `BLOCKED` with evidence. Do not call the app 
 - [ ] Simulate `complete_generation_job` returning no error while an image or clip job is already `failed`. Confirm the handler does not report success and the checked settlement path safely reconciles output/credits.
 - [ ] Confirm both image and clip paths return success only after `generation_jobs.status = complete` is read from the database.
 - [ ] Make the status read unavailable immediately after the completion RPC. Confirm the job's checked failure-settlement outcome determines whether output is preserved or compensated; do not delete output when the terminal state is uncertain.
+
+
+### YouTube publishing project-ownership regression
+
+- [ ] Create a ready export under User A's project. As User B, call YouTube publishing with User A's `projectId` and `exportId`; confirm the request is denied before token refresh, publication-row insertion, signed-export URL creation, or YouTube API calls.
+- [ ] As User A, publish one of User A's own ready exports to a staging/test YouTube channel and confirm the happy path still works.
+- [ ] Make the authenticated project lookup fail; confirm the admin export lookup and provider side effects are not reached.

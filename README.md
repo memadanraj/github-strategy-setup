@@ -64,3 +64,8 @@ Audio generation now verifies that the persisted generation job status is `compl
 ## Latest hardening update — visual completion confirmation
 
 Image and clip generation now share the checked completion wrapper used by audio: a successful RPC response is followed by a persisted state read, and success is reported only when the job is confirmed `complete`. The existing checked failure-settlement path still decides whether generated media is preserved or compensated after an uncertain result.
+
+
+## Latest hardening update — YouTube project ownership
+
+YouTube publishing now confirms project ownership through the authenticated Supabase session before it creates privileged publication records or accesses a private export. A missing, mismatched, or unreadable project lookup fails closed. The admin client is used only after that ownership check.
