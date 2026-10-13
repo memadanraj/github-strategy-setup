@@ -34,7 +34,7 @@ This file distinguishes **code present**, **automated checks**, and **live/stagi
 
 ## Recent verified branch work
 
-The previous hardening PR was merged into `main`. The active follow-on branch is `hardening/phase-3-media-persistence`; it has not been merged.
+The original hardening PR was merged into `main`. The next work is being developed as stacked draft PRs: `hardening/phase-3-media-persistence` (media/provider/settlement) and `hardening/phase-4-timeline-guardrails` (timeline bounds). Both follow-on branches remain unmerged.
 
 Code commit `3f89c3a3e830fcef99c0c0ce6426ac597ccec6bf` passed GitHub Actions:
 
@@ -86,3 +86,10 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - Synchronous text-AI tasks use the checked failure/refund RPC. A lost completion response is reconciled against the database; if the job is already complete and the result was persisted, the request returns success. Refund claims require a confirmed terminal state.
 - CI passed lint, typecheck, 27 test files, and production build on code commit `3f89c3a3e830fcef99c0c0ce6426ac597ccec6bf`. The following documentation-only commit has not had a separate workflow run yet.
 - Live provider timeouts, database races, and actual media responses still require staging validation.
+
+
+## Update — timeline timing guardrails (October 12, 2026)
+
+- Client-side clip/caption validation and database constraints now agree on a maximum timeline time of 24 hours. The client also rejects combined clip ranges ending after 24 hours, transition values over 80 characters, and caption text over 5,000 characters.
+- New migration `0024_timeline_timing_bounds.sql` uses `NOT VALID` checks to avoid silently changing existing records during migration. Operators must audit historic violations and validate the constraints in staging after any remediation.
+- CI passed lint, typecheck, **27 test files**, and production build for code commit `30117a02dec8360c147af234f04fc8326f282736`. Live database migration/staging behavior remains unverified.

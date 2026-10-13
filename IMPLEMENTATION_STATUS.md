@@ -2,7 +2,7 @@
 
 This is an evidence-based phase tracker for the master plan. A UI control or source file alone is not proof a feature is complete. `COMPLETE` should be used only after persistence, security, error paths, and relevant tests pass.
 
-**Working branch:** `hardening/phase-3-media-persistence`  
+**Working branch:** `hardening/phase-4-timeline-guardrails`  
 **Target:** draft PR, not `main`  
 **Status date:** 2026-10-12
 
@@ -17,7 +17,7 @@ This is an evidence-based phase tracker for the master plan. A UI control or sou
 | 6. Video clip generation | PARTIAL / TEST | Start/poll requests are bounded, transient poll network/timeouts are retried, provider status JSON has a size limit, and the overall job has a 15-minute deadline. Downloader bounds bytes/time, validates HTTPS/redirects/content type and does not forward gateway secrets to third-party hosts. Provider start/poll, cancel, retries and actual result playback still need staging validation. |
 | 7. Voice generation | EXISTING / TEST | Voice provider code and UI exist, but live verification requires `ELEVENLABS_API_KEY` and/or supported voice-provider credentials. |
 | 8. Captions | EXISTING / TEST | Caption/transcription model exists; timing, edit, export-format and rendered-caption acceptance tests remain. |
-| 9. Basic editor/timeline | EXISTING / TEST | Timeline tracks/clips, audio/text/caption data and UI exist. Drag/trim/split/undo/redo and persistence tests remain. |
+| 9. Basic editor/timeline | PARTIAL / TEST | Client timing validation now enforces a 24-hour ceiling for clip/caption times, verifies clip end using the saved timing, caps transition names at 80 chars and caption text at 5000 chars. Migration `0024_timeline_timing_bounds.sql` adds database-side upper bounds (`NOT VALID`) so direct API writes cannot bypass the same constraints. Drag/trim/split/undo/redo interaction tests, existing-row audit, and staging constraint validation remain. |
 | 10. Rendering | PARTIAL | Shotstack and compatible HTTP renderer adapters exist. Clear missing-provider failure and bounded MP4 result download added. Render-provider tests added; end-to-end render/playback and idempotent retry tests remain. |
 | 11. Export and sharing | PARTIAL / TEST | Share links store only SHA-256 token hashes, support optional scrypt password protection, 1/7/30-day or no-expiry links, revocation, a password lockout and temporary signed MP4 playback. Migration `0018`; token/password primitives are unit-tested. Route, storage, expiry, revocation, and migration behavior require staging verification. |
 | 12. Credits | PARTIAL / TEST | Synchronous AI tasks now use `fail_generation_job_checked` instead of the older void failure RPC. Refund wording depends on returned terminal state; `already_complete` plus a persisted result returns success, while unknown settlement triggers reconciliation messaging. Ledger race/concurrency, idempotency and live billing/job integration tests remain. |
@@ -130,3 +130,12 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Voice cloning checks the local clone/voice record writes and completion. If the provider created the clone but later local persistence fails, the response warns that the provider-side clone may need manual review.
 - Five helper tests cover success, completion failure, refund confirmation, settlement uncertainty, and preserving results for already-complete jobs. GitHub Actions passed on `e03856ebfff833b3332fda18a9ae4cd256fba050`.
 - Remaining risk: these are compensating actions across multiple database/storage operations, not one atomic transaction. Exercise all failure points and concurrent requests against staging before production.
+
+
+## Timeline guardrails — October 12, 2026
+
+- Clip start, duration, source-in and clip end are bounded to 24 hours in client-side validation; caption start/end are also bounded to 24 hours.
+- Transition fields are limited to 80 characters, caption text to 5,000 characters, and timeline grid size matches the DB rule of 0.1–10 seconds.
+- Database migration `0024_timeline_timing_bounds.sql` adds matching constraints with `NOT VALID` so existing data is not silently modified or immediately scanned during migration.
+- CI for code commit `30117a02dec8360c147af234f04fc8326f282736` passed lint, TypeScript typecheck, 27 test files, and the production build.
+- Before release, count records violating the new checks in staging, review/repair any outliers, then run `VALIDATE CONSTRAINT` for each constraint.

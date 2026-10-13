@@ -36,6 +36,25 @@ describe("timeline editor input validation", () => {
     expect(validateTimelineClipPatch(patch)).not.toBeNull();
   });
 
+  it("limits clip timing to 24 hours and validates the combined clip end", () => {
+    expect(validateTimelineClipPatch({ start_seconds: 86400 })).toBeNull();
+    expect(validateTimelineClipPatch({ start_seconds: 86401 })).toContain("24 hours");
+    expect(validateTimelineClipPatch({ duration_seconds: 86401 })).toContain("24 hours");
+    expect(validateTimelineClipPatch({ source_start_seconds: 86401 })).toContain("24 hours");
+    expect(validateTimelineClipPatch(
+      { start_seconds: 86395 },
+      { start_seconds: 10, duration_seconds: 5 },
+    )).toBeNull();
+    expect(validateTimelineClipPatch(
+      { start_seconds: 86399 },
+      { start_seconds: 86399, duration_seconds: 2 },
+    )).toContain("Clip end");
+    expect(validateTimelineClipPatch(
+      { duration_seconds: 2 },
+      { start_seconds: 86399, duration_seconds: 1 },
+    )).toContain("Clip end");
+  });
+
   it("validates caption timing using both the patch and saved values", () => {
     const current = { start_seconds: 1, end_seconds: 2, text: "Caption", position: "bottom" };
     expect(validateTimelineCaptionPatch({ start_seconds: 1.5 }, current)).toBeNull();
@@ -44,6 +63,8 @@ describe("timeline editor input validation", () => {
     expect(validateTimelineCaptionPatch({ position: "outside" }, current)).toContain("position");
     expect(validateTimelineCaptionPatch({ text: "x".repeat(5001) }, current)).toContain("5,000");
     expect(validateTimelineCaptionPatch({ start_seconds: Number.POSITIVE_INFINITY }, current)).toContain("finite");
+    expect(validateTimelineCaptionPatch({ start_seconds: 86401 }, current)).toContain("24 hours");
+    expect(validateTimelineCaptionPatch({ end_seconds: 86401 }, current)).toContain("24 hours");
   });
 
   it("validates FPS and grid bounds", () => {
