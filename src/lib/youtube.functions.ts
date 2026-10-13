@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { confirmProjectOwnership } from "./youtube-project-ownership";
+import { settleYouTubePublicationFailure, type ConfirmedYouTubeUpload } from "./youtube-publication-settlement";
 
 const OAUTH_SCOPES = [
   "https://www.googleapis.com/auth/youtube.upload",
@@ -150,6 +151,10 @@ export const publishYoutubeVideo = createServerFn({ method: "POST" })
     }).select("id").single()).data;
     if (!publication?.id) throw new Error("Couldn't create YouTube publication record.");
 
+    let uploadAttempted = false;
+    let uploadedVideo: ConfirmedYouTubeUpload | null = null;
+    let thumbnailUploaded = false;
+
     try {
       const signed = await db.storage.from("project-assets").createSignedUrl(exportRow.storage_path, 900);
       if (signed.error || !signed.data?.signedUrl) throw new Error("Couldn't access the rendered export.");
@@ -175,13 +180,21 @@ export const publishYoutubeVideo = createServerFn({ method: "POST" })
       }
       const uploadUrl = initResponse.headers.get("location");
       if (!uploadUrl) throw new Error("YouTube did not return an upload URL.");
+      uploadAttempted = true;
       const uploaded = await fetch(uploadUrl, {
         method: "PUT", headers: { "Content-Type": "video/mp4", "Content-Length": String(videoBytes.byteLength) }, body: videoBytes,
       });
       const uploadedJson: any = await uploaded.json().catch(() => ({}));
-      if (!uploaded.ok || !uploadedJson.id) throw new Error(uploadedJson?.error?.message || `YouTube upload failed (${uploaded.status}).`);
-
-      let thumbnailUploaded = false;
+      if (!uploaded.ok || typeof uploadedJson.id !== "string" || !uploadedJson.id.trim()) {
+        throw new Error(uploadedJson?.error?.message || `YouTube upload failed (${uploaded.status}).`);
+      }
+      const youtubeUrl = `https://www.youtube.com/watch?v=${uploadedJson.id}`;
+      uploadedVideo = {
+        id: uploadedJson.id,
+        url: youtubeUrl,
+        providerResponse: uploadedJson,
+        uploadedAt: new Date().toISOString(),
+      };
       if (data.thumbnailAssetId) {
         const asset = (await db.from("assets").select("storage_path,kind").eq("id", data.thumbnailAssetId).eq("project_id", data.projectId).maybeSingle()).data;
         if (!asset?.storage_path || asset.kind !== "image") throw new Error("Selected thumbnail is not a project image.");
@@ -202,16 +215,45 @@ export const publishYoutubeVideo = createServerFn({ method: "POST" })
         thumbnailUploaded = true;
       }
 
-      const youtubeUrl = `https://www.youtube.com/watch?v=${uploadedJson.id}`;
-      await db.from("youtube_publications").update({
-        youtube_video_id: uploadedJson.id, youtube_url: youtubeUrl, status: "published",
-        published_at: new Date().toISOString(), metadata: { thumbnailUploaded, response: uploadedJson },
+      const finalized = await db.from("youtube_publications").update({
+        youtube_video_id: uploadedJson.id,
+        youtube_url: youtubeUrl,
+        status: "published",
+        published_at: uploadedVideo.uploadedAt,
+        error: null,
+        metadata: { thumbnailUploaded, response: uploadedJson },
         updated_at: new Date().toISOString(),
-      }).eq("id", publication.id);
+      }).eq("id", publication.id).select("id").maybeSingle();
+      if (finalized.error || !finalized.data?.id) {
+        throw new Error("YouTube accepted the video, but the publication record could not be confirmed.");
+      }
       return { ok: true, publicationId: publication.id, videoId: uploadedJson.id, url: youtubeUrl };
-    } catch (error: any) {
-      await db.from("youtube_publications").update({ status: "failed", error: error?.message || "Upload failed", updated_at: new Date().toISOString() }).eq("id", publication.id);
-      throw error;
+    } catch (error: unknown) {
+      const settled = await settleYouTubePublicationFailure({
+        cause: error,
+        uploadAttempted,
+        uploadedVideo,
+        thumbnailUploaded,
+        persist: async (patch) => {
+          const { data, error: updateError } = await db.from("youtube_publications")
+            .update(patch)
+            .eq("id", publication.id)
+            .select("id")
+            .maybeSingle();
+          return { data: data?.id ? { id: String(data.id) } : null, error: updateError };
+        },
+      });
+
+      if (settled.kind === "published") {
+        return {
+          ok: true,
+          publicationId: publication.id,
+          videoId: settled.videoId,
+          url: settled.url,
+          warning: settled.warning,
+        };
+      }
+      throw new Error(settled.message);
     }
   });
 

@@ -158,3 +158,10 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - YouTube publishing verifies the project through the authenticated Supabase client, explicitly matching the requested project ID and signed-in user ID, before using the service-role client to access private exports or initiate provider activity.
 - Missing, mismatched, unreadable, or failed ownership lookups are denied before export signing, publication-row insertion, token refresh and YouTube API calls.
 - Unit tests cover owner success, missing projects, mismatched identity, thrown/database errors and missing user identity. Two-user staging verification with a test YouTube channel remains required.
+
+
+## Update — YouTube publication partial-success recovery (October 13, 2026)
+
+- Once YouTube returns a video ID, later thumbnail or local persistence failure no longer blindly marks the publication as failed; recovery attempts to preserve published status, video ID and URL and presents a follow-up warning.
+- If the upload PUT was attempted but the response/video ID is ambiguous, the record stays in reconciliation (uploading) state and tells the user to check YouTube before retrying, to avoid duplicate uploads.
+- Unit tests cover known remote success plus follow-up failure, uncertain upload response, pre-upload failure, and failed local reconciliation. A real test-channel upload/thumbnail failure run remains a staging release gate.

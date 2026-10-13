@@ -69,3 +69,8 @@ Image and clip generation now share the checked completion wrapper used by audio
 ## Latest hardening update — YouTube project ownership
 
 YouTube publishing now confirms project ownership through the authenticated Supabase session before it creates privileged publication records or accesses a private export. A missing, mismatched, or unreadable project lookup fails closed. The admin client is used only after that ownership check.
+
+
+## Latest hardening update — YouTube partial-success handling
+
+After YouTube returns a confirmed video ID, a later thumbnail or local database failure no longer blindly turns the publication into `failed`. The app preserves the YouTube video ID/URL, attempts a checked local reconciliation, and warns users not to re-upload when the remote upload outcome is uncertain.

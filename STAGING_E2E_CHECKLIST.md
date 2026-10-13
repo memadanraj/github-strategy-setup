@@ -104,3 +104,11 @@ Mark every step `PASS`, `FAIL`, or `BLOCKED` with evidence. Do not call the app 
 - [ ] Create a ready export under User A's project. As User B, call YouTube publishing with User A's `projectId` and `exportId`; confirm the request is denied before token refresh, publication-row insertion, signed-export URL creation, or YouTube API calls.
 - [ ] As User A, publish one of User A's own ready exports to a staging/test YouTube channel and confirm the happy path still works.
 - [ ] Make the authenticated project lookup fail; confirm the admin export lookup and provider side effects are not reached.
+
+
+### YouTube upload partial-success regression
+
+- [ ] Publish a video with no custom thumbnail and verify a checked `published` database row contains the returned YouTube video ID and URL.
+- [ ] Force thumbnail upload to fail after YouTube accepts the video. Confirm the publication stays `published`, the UI explains the follow-up failure, and the user is not prompted to retry the video upload.
+- [ ] Force the final database update to fail after YouTube returns a video ID. Confirm recovery preserves the ID/URL where possible and otherwise displays the explicit do-not-retry reconciliation message.
+- [ ] Simulate an upload request whose response is lost after the PUT starts. Confirm the record is kept as `uploading` with a warning to check YouTube before retrying, rather than being marked `failed` automatically.
