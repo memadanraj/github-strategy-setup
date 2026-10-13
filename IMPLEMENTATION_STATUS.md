@@ -219,3 +219,10 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Added a bounded raw-body reader for Paddle webhook requests (1 MiB maximum), with streamed-byte accounting, early declared-length rejection, and best-effort stream cancellation after overflow.
 - Oversized requests return 413 and do not invoke signature verification or database access. Unreadable streams return 400. Valid raw bytes are decoded once and passed to the existing signature verifier.
 - CI covers boundary and handler behavior. Deployed runtime ingress/body handling remains a staging verification item.
+
+
+## Share-link authorization hardening — October 13, 2026
+
+- Reused the checked project-ownership predicate for create/list/revoke share-link operations, explicitly filtering by project ID and authenticated user ID before admin-client access.
+- Checked the successful-password lockout reset write; a failed/uncertain reset no longer proceeds to create a signed playback URL.
+- No schema migration was added. CI tests and staging checks still need to validate the route-level integration, RLS, lockout concurrency, expiry/revocation and signed media URL lifetime.

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { confirmProjectOwnership } from "./youtube-project-ownership";
 import type {
   CreateProjectShareResult,
   ListProjectSharesResult,
@@ -24,10 +25,17 @@ export const createProjectShareLink = createServerFn({ method: "POST" })
     expiresInDays: expirySchema.optional(),
   }).parse(d))
   .handler(async ({ data, context }): Promise<CreateProjectShareResult> => {
-    const db: any = context.supabase;
-    const { data: project, error: projectError } = await db
-      .from("projects").select("id").eq("id", data.projectId).maybeSingle();
-    if (projectError || !project) return { ok: false, error: "Project not found." };
+    const projectOwned = await confirmProjectOwnership({
+      projectId: data.projectId,
+      userId: context.userId,
+      lookup: (projectId, userId) => context.supabase
+        .from("projects")
+        .select("id")
+        .eq("id", projectId)
+        .eq("user_id", userId)
+        .maybeSingle(),
+    });
+    if (!projectOwned) return { ok: false, error: "Project not found." };
 
     const { data: exportRow, error: exportError } = await db
       .from("exports").select("id,status,storage_path")
@@ -73,10 +81,17 @@ export const listProjectShareLinks = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ projectId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }): Promise<ListProjectSharesResult> => {
-    const db: any = context.supabase;
-    const { data: project, error: projectError } = await db
-      .from("projects").select("id").eq("id", data.projectId).maybeSingle();
-    if (projectError || !project) return { ok: false, error: "Project not found." };
+    const projectOwned = await confirmProjectOwnership({
+      projectId: data.projectId,
+      userId: context.userId,
+      lookup: (projectId, userId) => context.supabase
+        .from("projects")
+        .select("id")
+        .eq("id", projectId)
+        .eq("user_id", userId)
+        .maybeSingle(),
+    });
+    if (!projectOwned) return { ok: false, error: "Project not found." };
 
     const admin = await getAdmin();
     const { data: rows, error } = await admin.from("project_share_links")
@@ -101,10 +116,17 @@ export const revokeProjectShareLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ projectId: z.string().uuid(), shareId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }): Promise<RevokeProjectShareResult> => {
-    const db: any = context.supabase;
-    const { data: project, error: projectError } = await db
-      .from("projects").select("id").eq("id", data.projectId).maybeSingle();
-    if (projectError || !project) return { ok: false, error: "Project not found." };
+    const projectOwned = await confirmProjectOwnership({
+      projectId: data.projectId,
+      userId: context.userId,
+      lookup: (projectId, userId) => context.supabase
+        .from("projects")
+        .select("id")
+        .eq("id", projectId)
+        .eq("user_id", userId)
+        .maybeSingle(),
+    });
+    if (!projectOwned) return { ok: false, error: "Project not found." };
 
     const admin = await getAdmin();
     const { data: row, error } = await admin.from("project_share_links")
@@ -147,8 +169,19 @@ export const resolveProjectShare = createServerFn({ method: "POST" })
         return { ok: false, error: "Incorrect password.", passwordRequired: true };
       }
 
-      await admin.from("project_share_links")
-        .update({ failed_password_attempts: 0, locked_until: null }).eq("id", share.id);
+      const { data: resetRow, error: resetError } = await admin.from("project_share_links")
+        .update({ failed_password_attempts: 0, locked_until: null })
+        .eq("id", share.id)
+        .select("id")
+        .maybeSingle();
+      if (resetError || !resetRow?.id) {
+        console.error("Share password lockout reset could not be confirmed.");
+        return {
+          ok: false,
+          error: "Couldn't validate that password right now. Please retry shortly.",
+          passwordRequired: true,
+        };
+      }
     }
 
     const { data: project, error: projectError } = await admin.from("projects")

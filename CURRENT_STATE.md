@@ -172,3 +172,10 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - The public Paddle webhook reads raw bytes up to 1 MiB and rejects larger bodies with HTTP 413 before signature verification, JSON parsing, or database access.
 - Declared `Content-Length` is an early-rejection path; actual streamed byte counts remain authoritative.
 - Tests cover the byte-limit boundary, oversized streamed bodies, declared-length rejection, and no signature/database calls on handler-level rejection. No schema migration was added.
+
+
+## Update — share-link ownership and lockout settlement (October 13, 2026)
+
+- Create, list, and revoke share-link operations now confirm project ownership with both project ID and authenticated user ID through the request-scoped Supabase client before service-role operations.
+- Successful password validation is not reported as accepted until the database confirms the lockout counter reset. Database errors fail closed with a retry message.
+- Existing unit tests cover the shared ownership predicate and password primitives. Route-level, RLS, concurrent lockout, expiry, revocation, and signed-URL behavior still require staging verification.

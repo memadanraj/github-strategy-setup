@@ -119,3 +119,12 @@ Mark every step `PASS`, `FAIL`, or `BLOCKED` with evidence. Do not call the app 
 - [ ] Confirm a correctly signed normal event under 1 MiB still processes and returns 200.
 - [ ] Send an over-limit body with oversized or missing `Content-Length`; confirm HTTP 413 is returned before signature verification/database access and no Paddle event row is created.
 - [ ] Confirm a valid body at the byte limit is not rejected solely due to its declared length.
+
+
+### Share-link ownership and password lockout
+
+- [ ] As User A, create/list/revoke a share link for an owned project; verify each operation works.
+- [ ] As User B, submit User A's project ID and share-link ID to create/list/revoke endpoints; verify denial and no admin-side mutation.
+- [ ] For a password-protected link, verify incorrect attempts increment the server-side counter and eventually lock; a correct password must reset the counter successfully before playback is signed.
+- [ ] Simulate a lockout-reset database error and confirm no playback URL is returned.
+- [ ] Confirm expiry/revocation checks and note that already-issued signed URLs may remain usable until their short expiry.
