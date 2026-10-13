@@ -25,6 +25,7 @@ export const createProjectShareLink = createServerFn({ method: "POST" })
     expiresInDays: expirySchema.optional(),
   }).parse(d))
   .handler(async ({ data, context }): Promise<CreateProjectShareResult> => {
+    const db: any = context.supabase;
     const projectOwned = await confirmProjectOwnership({
       projectId: data.projectId,
       userId: context.userId,
