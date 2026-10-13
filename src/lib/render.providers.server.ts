@@ -1,3 +1,4 @@
+import { captionTextCss, normalizeCaptionStyle } from "@/lib/caption-style";
 export type RenderManifest = {
   projectId: string; width: number; height: number; fps: number; format: string;
   scenes: any[]; tracks: any[]; clips: any[]; captions: any[]; assets: any[];
