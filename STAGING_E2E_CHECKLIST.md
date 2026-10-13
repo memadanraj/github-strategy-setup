@@ -128,3 +128,11 @@ Mark every step `PASS`, `FAIL`, or `BLOCKED` with evidence. Do not call the app 
 - [ ] For a password-protected link, verify incorrect attempts increment the server-side counter and eventually lock; a correct password must reset the counter successfully before playback is signed.
 - [ ] Simulate a lockout-reset database error and confirm no playback URL is returned.
 - [ ] Confirm expiry/revocation checks and note that already-issued signed URLs may remain usable until their short expiry.
+
+
+### Credit ledger confirmation and idempotency
+
+- [ ] Fulfill a Paddle sandbox credit pack and confirm one ledger transaction and matching profile balance.
+- [ ] Deliver the same transaction event more than once and confirm the idempotency key prevents a duplicate grant.
+- [ ] Confirm a database error or an uncertain/no-balance RPC response is not acknowledged as successful fulfillment; verify Paddle retry/reconciliation behavior.
+- [ ] Exercise concurrent credit grants and job reservations against staging Postgres and verify the ledger/balance remain consistent.

@@ -179,3 +179,9 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - Create, list, and revoke share-link operations now confirm project ownership with both project ID and authenticated user ID through the request-scoped Supabase client before service-role operations.
 - Successful password validation is not reported as accepted until the database confirms the lockout counter reset. Database errors fail closed with a retry message.
 - Existing unit tests cover the shared ownership predicate and password primitives. Route-level, RLS, concurrent lockout, expiry, revocation, and signed-URL behavior still require staging verification.
+
+
+## Update — credit grant confirmation (October 13, 2026)
+
+- Paddle credit grants now require both an error-free `apply_credit_transaction` response and a valid non-negative integer balance. Missing, malformed, or negative output fails closed rather than reporting success.
+- Unit tests cover malformed no-error responses and a confirmed balance. Database concurrency, idempotency conflicts, and webhook-to-credit settlement still require staging/database integration tests.

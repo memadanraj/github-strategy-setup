@@ -226,3 +226,9 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Reused the checked project-ownership predicate for create/list/revoke share-link operations, explicitly filtering by project ID and authenticated user ID before admin-client access.
 - Checked the successful-password lockout reset write; a failed/uncertain reset no longer proceeds to create a signed playback URL.
 - No schema migration was added. CI tests and staging checks still need to validate the route-level integration, RLS, lockout concurrency, expiry/revocation and signed media URL lifetime.
+
+
+## Credit ledger result confirmation — October 13, 2026
+
+- The `addCredits` wrapper now validates the RPC's returned balance as a non-negative safe integer, in addition to checking the RPC error field.
+- Regression tests cover null/undefined/string/negative/fractional results and valid confirmed balances. This is response validation only; atomicity and idempotency still rely on the SQL RPC and need real database concurrency tests in staging.
