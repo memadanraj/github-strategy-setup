@@ -212,3 +212,10 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Tracks upload attempt and confirmed video ID; the normal final publication update now verifies the expected row was returned.
 - Confirmed remote success plus a later error attempts a checked local recovery to preserve published state, URL and provider ID. Ambiguous upload outcome is kept in uploading/reconciliation state instead of marked failed automatically.
 - The UI distinguishes published-with-warning from full success. Unit coverage passed in CI; a real YouTube channel test is still required.
+
+
+## Paddle webhook body-size guard — October 13, 2026
+
+- Added a bounded raw-body reader for Paddle webhook requests (1 MiB maximum), with streamed-byte accounting, early declared-length rejection, and best-effort stream cancellation after overflow.
+- Oversized requests return 413 and do not invoke signature verification or database access. Unreadable streams return 400. Valid raw bytes are decoded once and passed to the existing signature verifier.
+- CI covers boundary and handler behavior. Deployed runtime ingress/body handling remains a staging verification item.

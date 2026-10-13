@@ -165,3 +165,10 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - Once YouTube returns a video ID, later thumbnail or local persistence failure no longer blindly marks the publication as failed; recovery attempts to preserve published status, video ID and URL and presents a follow-up warning.
 - If the upload PUT was attempted but the response/video ID is ambiguous, the record stays in reconciliation (uploading) state and tells the user to check YouTube before retrying, to avoid duplicate uploads.
 - Unit tests cover known remote success plus follow-up failure, uncertain upload response, pre-upload failure, and failed local reconciliation. A real test-channel upload/thumbnail failure run remains a staging release gate.
+
+
+## Update — Paddle webhook request-size guard (October 13, 2026)
+
+- The public Paddle webhook reads raw bytes up to 1 MiB and rejects larger bodies with HTTP 413 before signature verification, JSON parsing, or database access.
+- Declared `Content-Length` is an early-rejection path; actual streamed byte counts remain authoritative.
+- Tests cover the byte-limit boundary, oversized streamed bodies, declared-length rejection, and no signature/database calls on handler-level rejection. No schema migration was added.

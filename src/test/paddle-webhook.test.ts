@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handlePaddleWebhook } from "@/lib/paddle.webhook.server";
+import { MAX_PADDLE_WEBHOOK_BODY_BYTES } from "@/lib/paddle-webhook-body";
 
 const mocks = vi.hoisted(() => ({ admin: vi.fn(), verify: vi.fn(), addCredits: vi.fn(), paddleEnv: vi.fn() }));
 
@@ -65,6 +66,15 @@ describe("Paddle webhook delivery idempotency", () => {
     expect((await handlePaddleWebhook(makeRequest("{bad-json"))).status).toBe(400);
     expect(mocks.admin).not.toHaveBeenCalled();
     expect((await handlePaddleWebhook(makeRequest(JSON.stringify({ event_type: "transaction.completed" })))).status).toBe(400);
+    expect(mocks.admin).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized payloads before signature verification or database access", async () => {
+    const payload = "x".repeat(MAX_PADDLE_WEBHOOK_BODY_BYTES + 1);
+    const response = await handlePaddleWebhook(makeRequest(payload));
+    expect(response.status).toBe(413);
+    expect(await response.text()).toBe("Webhook payload too large");
+    expect(mocks.verify).not.toHaveBeenCalled();
     expect(mocks.admin).not.toHaveBeenCalled();
   });
 
