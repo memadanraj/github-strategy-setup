@@ -101,3 +101,11 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - Caption saves submit text, start and end together. Clip saves submit start, duration, source-in and volume together so combined timing validation runs on one consistent patch.
 - Failed saves retain drafts and show the existing error feedback instead of resetting the user's input.
 - CI passed lint, typecheck, **28 test files**, and build on code commit `48b25b7e2c3ce86fdd94e21e3480bc0e42d7a40d`. Current migration/staging gates described above still apply.
+
+
+## Update — rendered MP4 integrity (October 12, 2026)
+
+- Render downloads are still bounded to 512 MiB and now also need an MP4-compatible content type and a structurally valid ISO BMFF container before upload.
+- The structural checks require file-type, movie and non-empty media-data boxes; truncated/oversized boxes and malformed/non-MP4 responses are rejected.
+- Invalid container output becomes a failed render, rather than a ready export. CI passed lint, typecheck, **29 test files** (7 MP4 validation tests), and production build on code commit `611893c00bc9826d24d31581e58552a592d8d664`.
+- This is not a codec-level validation or an end-to-end playback result. A real renderer, storage, export-download and browser playback test is still required in staging.

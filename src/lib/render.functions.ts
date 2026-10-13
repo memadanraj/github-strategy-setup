@@ -5,6 +5,7 @@ import {getRenderProvider,type RenderManifest} from "./render.providers.server";
 import { claimRenderJobFinalization } from "./render-finalization";
 import { cancelRenderJobWithProvider } from "./render-cancellation";
 import { downloadRemoteMedia } from "./remote-media.server";
+import { MAX_RENDER_EXPORT_BYTES, Mp4ValidationError, validateMp4Container } from "./mp4-validation";
 async function adm():Promise<any>{return (await import("@/integrations/supabase/client.server")).supabaseAdmin}
 async function signManifest(admin:any,m:RenderManifest){
  const paths=new Set<string>();
@@ -213,9 +214,10 @@ export const getRenderJob = createServerFn({ method: "POST" })
 
       const downloaded = await downloadRemoteMedia(status.outputUrl, {
         timeoutMs: 120_000,
-        maxBytes: 512 * 1024 * 1024,
+        maxBytes: MAX_RENDER_EXPORT_BYTES,
         allowedContentTypes: ["video/mp4", "application/octet-stream"],
       });
+      validateMp4Container(downloaded.bytes, downloaded.contentType);
       const bytes = Buffer.from(downloaded.bytes);
       const path = String(job.user_id) + "/" + String(data.projectId) + "/exports/" + String(job.id) + ".mp4";
       const storage = admin.storage.from("project-assets");
@@ -316,6 +318,35 @@ export const getRenderJob = createServerFn({ method: "POST" })
           }
           return { ok: true, job };
         }
+        if (error instanceof Mp4ValidationError) {
+          const failedPatch = {
+            status: "failed",
+            error: message,
+            finished_at: new Date().toISOString(),
+            finalization_started_at: null,
+            updated_at: new Date().toISOString(),
+          };
+          const failed = await admin.from("render_jobs")
+            .update(failedPatch)
+            .eq("id", job.id)
+            .eq("status", "processing")
+            .select("id")
+            .maybeSingle();
+          if (failed.error) {
+            job.status = "processing";
+            job.error = "Renderer output was invalid, but its failure state could not be saved. Retry and reconcile this render.";
+            return { ok: true, job };
+          }
+          if (!failed.data) {
+            const fresh = await admin.from("render_jobs").select("*").eq("id", job.id).maybeSingle();
+            return fresh.error || !fresh.data
+              ? { ok: false, error: "Render job not found." }
+              : { ok: true, job: fresh.data };
+          }
+          Object.assign(job, failedPatch);
+          return { ok: true, job };
+        }
+
         const retryablePatch = { status: "processing", error: message, updated_at: new Date().toISOString() };
         const retryable = await admin.from("render_jobs").update(retryablePatch).eq("id", job.id).eq("status", "processing").select("id").maybeSingle();
         Object.assign(job, retryablePatch);

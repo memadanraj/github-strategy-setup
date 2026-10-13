@@ -14,7 +14,7 @@ The repository contains baseline implementations for authentication, dashboard, 
 - [ ] Phase 7 — image/video generation and safe media persistence (checked asset/scene/job writes, compensating cleanup, bounded provider calls and failure-state tests added; staging verification remains)
 - [ ] Phase 8 — voice/music/SFX and captions acceptance tests
 - [ ] Phase 9 — timeline/editor persistence and interaction tests (24-hour DB/client bounds; explicit-save caption/clip draft forms and failure-preservation tests added; migration 0024 needs staging audit/constraint validation; drag/trim/split/undo/redo tests remain)
-- [ ] Phase 10 — rendering, export integrity, and playback validation
+- [ ] Phase 10 — rendering, export integrity, and playback validation (bounded output plus MP4 container/type/box validation implemented and CI-tested; live renderer, codec/decode, playback and staging race tests remain)
 - [ ] Phase 11 — private/unlisted/password/expiry/revocable share links (token-hashed public export links, optional password, expiration and revocation implemented on branch; staging tests remain)
 - [ ] Phase 12 — credit ledger concurrency, refunds, reconciliation
 - [ ] Phase 13 — Paddle checkout and webhook lifecycle in sandbox (signature, price mapping and delivery retry unit tests added; sandbox checkout/subscription/refund verification remains)
@@ -39,3 +39,8 @@ Client validation and migration `0024_timeline_timing_bounds.sql` now cap clip/c
 ### Timeline editor interaction (October 12, 2026)
 
 The caption editor and clip inspector now stage field changes locally and persist one combined patch on explicit save. Unit/component tests verify persistence is not triggered on each keystroke and failed saves keep the user's draft. Undo/redo and drag/trim/split acceptance tests remain to be implemented.
+
+
+### Render/export integrity update (October 12, 2026)
+
+Before a rendered file is uploaded and registered as a ready export, the app now checks the content type, 512 MiB maximum size, top-level MP4 box boundaries, and presence of `ftyp`, `moov`, and non-empty `mdat` boxes. Invalid containers are marked as render failures. CI passed lint, typecheck, 29 test files and build for code commit `611893c00bc9826d24d31581e58552a592d8d664`. Live rendering, full decode and playback remain open.
