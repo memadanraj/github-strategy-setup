@@ -198,3 +198,10 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Added one shared checked-completion helper and wired it into audio, image and clip persistence. It requires a database read confirming generation_jobs.status = complete after the void completion RPC.
 - Failed, nonterminal, missing, or unreadable terminal-state results become errors handled by the existing checked failure settlement/compensation logic; media is not cleaned up when the settled state is uncertain.
 - Unit coverage exercises success, guarded no-op on failed jobs, unreadable/missing status, and RPC failures. Real provider/storage fault injection remains staging-only.
+
+
+## YouTube publishing ownership guard — October 13, 2026
+
+- Added a fail-closed ownership check before service-role export access, publication creation, token refresh or calls to the YouTube API.
+- The ownership lookup uses the request-scoped authenticated client and filters by both project ID and the signed-in user's ID.
+- Unit tests cover allowed, missing, mismatched, failed and thrown lookup cases. No database migration was needed; two-user staging verification remains a release gate.

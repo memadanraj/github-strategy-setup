@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { confirmProjectOwnership } from "./youtube-project-ownership";
 
 const OAUTH_SCOPES = [
   "https://www.googleapis.com/auth/youtube.upload",
@@ -120,6 +121,22 @@ export const publishYoutubeVideo = createServerFn({ method: "POST" })
     thumbnailAssetId: z.string().uuid().optional(),
   }).parse(data))
   .handler(async ({ data, context }) => {
+    const projectOwned = await confirmProjectOwnership({
+      projectId: data.projectId,
+      userId: context.userId,
+      lookup: (projectId, userId) => context.supabase
+        .from("projects")
+        .select("id")
+        .eq("id", projectId)
+        .eq("user_id", userId)
+        .maybeSingle(),
+    });
+    if (!projectOwned) {
+      throw new Error("Project not found or access denied.");
+    }
+
+    // Only switch to the service-role database client after the request-scoped
+    // session proves that this caller owns the project.
     const db: any = await admin();
     const { token } = await accessTokenFor(context.userId);
     const exportRow = (await db.from("exports").select("id,project_id,storage_path,filename,status").eq("id", data.exportId).eq("project_id", data.projectId).maybeSingle()).data;

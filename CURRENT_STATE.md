@@ -151,3 +151,10 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - Audio, image, and clip jobs now share a completion helper that reads the persisted generation-job state after the legacy completion RPC. Only a persisted completed state is reported as success.
 - A guarded no-op on a failed terminal job, missing/unreadable status, or a nonterminal state follows the checked failure-settlement path instead of reporting success.
 - Staging still must exercise real provider results, storage failures, settlement concurrency and actual playback.
+
+
+## Update — YouTube project ownership (October 13, 2026)
+
+- YouTube publishing verifies the project through the authenticated Supabase client, explicitly matching the requested project ID and signed-in user ID, before using the service-role client to access private exports or initiate provider activity.
+- Missing, mismatched, unreadable, or failed ownership lookups are denied before export signing, publication-row insertion, token refresh and YouTube API calls.
+- Unit tests cover owner success, missing projects, mismatched identity, thrown/database errors and missing user identity. Two-user staging verification with a test YouTube channel remains required.
