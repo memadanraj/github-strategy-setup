@@ -198,3 +198,11 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 
 
 - Verification evidence: [CI run 38406345057](https://github.com/memadanraj/github-strategy-setup/actions/runs/38406345057) passed lint, type-check, **32 test files / 262 tests**, and production build for code commit `af63680510ebb1ea20038de5bbddbf5e3473b99c`. Existing warning-level lint findings did not fail CI; two-user YouTube sandbox verification remains a release gate.
+
+
+## YouTube publication partial-failure reconciliation — October 13, 2026
+
+- Added tested settlement logic distinguishing pre-upload failures, uncertain upload outcomes, and confirmed YouTube success followed by a later failure.
+- A confirmed video ID remains associated with a `published` record even if thumbnail/finalization fails; an ambiguous upload keeps the row in `uploading` and tells the user to check YouTube before retrying. Final publication writes now verify that the database returned the expected row.
+- Updated the publishing UI to show follow-up warnings for videos that are already live. No schema migration was added.
+- Staging verification still must exercise successful upload, thumbnail failure, local database write failure, and a lost/ambiguous upload response with a test channel.

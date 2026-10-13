@@ -177,3 +177,11 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 
 
 - CI run [38406345057](https://github.com/memadanraj/github-strategy-setup/actions/runs/38406345057) passed lint, TypeScript type-check, all **32 test files / 262 tests**, and production build on code commit `af63680510ebb1ea20038de5bbddbf5e3473b99c`. Existing warning-level lint findings remain; cross-user YouTube publishing still needs a two-account staging test.
+
+
+## Update — YouTube partial-success handling (October 13, 2026)
+
+- Video uploads now track the external-success state as soon as YouTube returns a valid video ID. The final publication-row update is checked rather than assumed successful.
+- If thumbnail processing or final local persistence then fails, recovery keeps `status = published` when the video ID is known, records the follow-up error, and returns a warning instead of encouraging a duplicate upload.
+- If the upload request was attempted but no response/video ID was confirmed, the publication remains `uploading` with an explicit reconciliation message; it is not automatically marked failed because YouTube may have accepted it.
+- Added unit coverage for pre-upload failure, known remote success followed by failure, ambiguous upload response, and local reconciliation failures. No database migration was added.
