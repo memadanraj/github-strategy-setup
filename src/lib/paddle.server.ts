@@ -52,11 +52,10 @@ export async function addCredits(
     _description: description,
     _idempotency_key: idempotencyKey,
   });
-  if (
-    result.error ||
-    !Number.isSafeInteger(result.data) ||
-    result.data < 0
-  ) {
+  if (result.error) {
+    throw new Error("Couldn't apply the credit ledger transaction.");
+  }
+  if (!Number.isSafeInteger(result.data) || result.data < 0) {
     throw new Error("Couldn't confirm the credit ledger transaction.");
   }
 }
