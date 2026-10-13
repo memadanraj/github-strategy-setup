@@ -53,6 +53,8 @@ Additional hardening migrations introduced on this branch:
 - `0023_atomic_timeline_and_captions.sql` adds owner-checked transaction RPCs for timeline rebuild and caption regeneration so deletes/inserts roll back together on failure.
 - `0024_timeline_timing_bounds.sql` adds database-side 24-hour clip/caption timing limits, combined clip-end checks, 80-character transition limits, 5,000-character caption limits and the 0.1-second timeline-grid lower bound. These checks are `NOT VALID` to avoid silently modifying historical rows during migration.
 
+The timeline editor stores caption text/timing and clip start/duration/source-in/volume in local form state while editing. Use **Save caption** or **Save clip changes** to send one validated patch after the user is done typing; failed saves leave the draft visible so the user can retry. CI component tests verify there is no database call on each keystroke and that a rejected save does not discard the draft.
+
 
 Review and apply `0015` through `0021` in dependency order where they have not already been applied, but only after a database backup and staging schema check. The repository has historical duplicate migration prefixes and an incomplete Drizzle journal, so do not assume numeric file order alone means a generic migration command will apply them correctly. Verify the actual database migration records first.
 
