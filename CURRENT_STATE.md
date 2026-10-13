@@ -146,3 +146,11 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - Unit coverage checks multiple subscriptions, grace-period handling, terminal/paused subscriptions, invalid timestamps, and the no-subscription fallback.
 - GitHub Actions run [38232544992](https://github.com/memadanraj/github-strategy-setup/actions/runs/38232544992) passed lint, TypeScript typecheck, unit/component tests (**30 test files, 252 tests**), and production build for code commit `cc4fcc900aac486eded29715823e73b0d320a7ad`. Lint still reports inherited warnings, but no lint errors.
 - This remains mocked/unit-level verification. Paddle event ordering and the real subscription lifecycle still require sandbox testing.
+
+
+## Update — audio completion confirmation (October 13, 2026)
+
+- Audio success responses now require a follow-up read proving `generation_jobs.status = complete`; a void completion RPC returning without an error is no longer treated as proof that the job transitioned.
+- Regression coverage includes a verified complete job, an already-failed job whose completion RPC is a guarded no-op, an unreadable/missing terminal state, and a completion RPC error.
+- No migration was added. The implementation still relies on the existing `generation_jobs` state and checked failure-settlement RPC.
+- Live provider/storage/database fault-injection and audio playback verification remain part of the staging release gate.

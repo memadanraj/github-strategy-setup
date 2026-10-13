@@ -6,19 +6,37 @@ import {
 } from "@/lib/audio-job-settlement";
 
 describe("audio generation job settlement", () => {
-  it("checks the completion RPC result", async () => {
+  it("checks both the completion RPC and persisted terminal state", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
-    await expect(completeAudioJob(rpc, "job-1", { path: "audio.mp3" })).resolves.toBeUndefined();
+    const readStatus = vi.fn(async () => ({ data: { status: "complete" }, error: null }));
+    await expect(completeAudioJob(rpc, "job-1", { path: "audio.mp3" }, readStatus)).resolves.toBeUndefined();
     expect(rpc).toHaveBeenCalledWith("complete_generation_job", {
       _job_id: "job-1",
       _output: { path: "audio.mp3" },
     });
+    expect(readStatus).toHaveBeenCalledWith("job-1");
+  });
+
+  it("does not report success when the completion RPC is a no-op for an already failed job", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+    const readStatus = vi.fn(async () => ({ data: { status: "failed" }, error: null }));
+    await expect(completeAudioJob(rpc, "job-1", {}, readStatus))
+      .rejects.toThrow("Audio generation job was already marked failed");
+  });
+
+  it("requires a readable persisted completion state", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+    const readStatus = vi.fn(async () => ({ data: null, error: { message: "database unavailable" } }));
+    await expect(completeAudioJob(rpc, "job-1", {}, readStatus))
+      .rejects.toThrow("Could not confirm audio generation job completion.");
   });
 
   it("does not ignore a completion RPC error", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: "database unavailable" } });
-    await expect(completeAudioJob(rpc, "job-1", {}))
+    const readStatus = vi.fn(async () => ({ data: { status: "complete" }, error: null }));
+    await expect(completeAudioJob(rpc, "job-1", {}, readStatus))
       .rejects.toThrow("Could not finalize the audio generation job.");
+    expect(readStatus).not.toHaveBeenCalled();
   });
 
   it("only says credits were refunded when checked settlement confirms it", async () => {

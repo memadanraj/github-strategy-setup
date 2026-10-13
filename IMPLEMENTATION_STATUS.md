@@ -168,3 +168,11 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Regression tests cover multiple plan rows, pending payment recovery, paused/canceled rows, and missing candidates.
 - CI run [38232544992](https://github.com/memadanraj/github-strategy-setup/actions/runs/38232544992) passed lint, typecheck, unit/component tests (**30 test files, 252 tests**), and production build on code commit `cc4fcc900aac486eded29715823e73b0d320a7ad`. Lint still emits inherited warnings without errors.
 - Staging verification remains required for real Paddle cancellation, renewal, grace-period, and event-order scenarios.
+
+
+## Audio completion state verification — October 13, 2026
+
+- Updated the shared audio completion wrapper to read the persisted generation job status after the legacy void completion RPC. Only `status = complete` may be reported as success.
+- If the job is failed or the state cannot be read, the audio handler follows its existing checked failure-settlement path instead of claiming success. Existing cleanup logic still preserves generated media when settlement cannot be confirmed.
+- Regression tests exercise no-op completion on an already-failed job and an unavailable/unknown state read. No schema migration is needed.
+- Staging verification remains required for voiceover, preview, cloning, music flows, storage failures, and lost completion responses.
