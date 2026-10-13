@@ -195,18 +195,20 @@ export function TimelinePanel({ project }: { project: Project }) {
       return false;
     }
   }
-  async function saveSettings(patch:any) {
+  async function saveSettings(patch:any): Promise<boolean> {
     const invalid = validateTimelineSettingsPatch(patch);
-    if (invalid) { toast.error(invalid); return; }
+    if (invalid) { toast.error(invalid); return false; }
     try {
       const r = await db.from("timeline_settings")
         .upsert({project_id:project.id,...patch,updated_at:new Date().toISOString()})
         .select("project_id").single();
-      if (r.error) { toast.error(r.error.message); return; }
-      if (!r.data) { toast.error("Timeline settings could not be confirmed."); return; }
+      if (r.error) { toast.error(r.error.message); return false; }
+      if (!r.data) { toast.error("Timeline settings could not be confirmed."); return false; }
       await qc.invalidateQueries({queryKey:["timeline_settings",project.id]});
+      return true;
     } catch {
       toast.error("Could not save timeline settings. Check your connection and try again.");
+      return false;
     }
   }
 
