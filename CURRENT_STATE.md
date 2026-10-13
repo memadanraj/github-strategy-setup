@@ -153,4 +153,5 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - Audio success responses now require a follow-up read proving `generation_jobs.status = complete`; a void completion RPC returning without an error is no longer treated as proof that the job transitioned.
 - Regression coverage includes a verified complete job, an already-failed job whose completion RPC is a guarded no-op, an unreadable/missing terminal state, and a completion RPC error.
 - No migration was added. The implementation still relies on the existing `generation_jobs` state and checked failure-settlement RPC.
-- Live provider/storage/database fault-injection and audio playback verification remain part of the staging release gate.
+- CI run [38404696357](https://github.com/memadanraj/github-strategy-setup/actions/runs/38404696357) passed lint, TypeScript type-check, all **30 test files / 254 tests**, and the production build on code commit `45c95f7f4efe4f5cdc2e469d4b9a5d5396596562`.
+- The run still reports inherited warning-level lint findings and existing empty-link warnings. Live provider/storage/database fault-injection and audio playback verification remain part of the staging release gate.

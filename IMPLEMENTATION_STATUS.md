@@ -175,4 +175,5 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Updated the shared audio completion wrapper to read the persisted generation job status after the legacy void completion RPC. Only `status = complete` may be reported as success.
 - If the job is failed or the state cannot be read, the audio handler follows its existing checked failure-settlement path instead of claiming success. Existing cleanup logic still preserves generated media when settlement cannot be confirmed.
 - Regression tests exercise no-op completion on an already-failed job and an unavailable/unknown state read. No schema migration is needed.
-- Staging verification remains required for voiceover, preview, cloning, music flows, storage failures, and lost completion responses.
+- CI run [38404696357](https://github.com/memadanraj/github-strategy-setup/actions/runs/38404696357) passed lint, TypeScript type-check, all **30 test files / 254 tests**, and production build for code commit `45c95f7f4efe4f5cdc2e469d4b9a5d5396596562`.
+- Inherited warning-level lint findings and empty-link warnings remain; they did not fail CI. Staging verification is still required for voiceover, preview, cloning, music flows, storage failures, and lost completion responses.
