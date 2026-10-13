@@ -1,3 +1,4 @@
+import { captionTextCss, normalizeCaptionStyle } from "@/lib/caption-style";
 export type RenderManifest = {
   projectId: string; width: number; height: number; fps: number; format: string;
   scenes: any[]; tracks: any[]; clips: any[]; captions: any[]; assets: any[];
@@ -56,10 +57,22 @@ export function toShotstackEdit(m: RenderManifest) {
     }
   }
   if (visual.length === 0) throw new Error("Nothing to render — add images or clips to your scenes first.");
-  const captions = m.captions.filter((c: any) => c.text?.trim()).map((c: any) => ({
-    asset: { type: "title", text: c.text, style: "subtitle", size: "small", position: c.position === "top" ? "top" : c.position === "center" ? "center" : "bottom" },
-    start: Number(c.start_seconds) || 0, length: Math.max(0.2, Number(c.end_seconds) - Number(c.start_seconds)),
-  }));
+  const captions = m.captions.filter((c: any) => c.text?.trim()).map((c: any) => {
+    const s = normalizeCaptionStyle(c.style, c.position);
+    const k = (m.height || 1080) / 1080;
+    const css = captionTextCss(s, k);
+    const cssText = Object.entries(css).map(([key, v]) => `${key.replace(/[A-Z]/g, (ch) => "-" + ch.toLowerCase()).replace(/^webkit/, "-webkit")}:${v}`).join(";");
+    const esc = String(c.text).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]!));
+    const w = Math.round((m.width || 1920) * s.maxWidth / 100);
+    const h = Math.round(s.size * k * 4);
+    return {
+      asset: { type: "html", html: `<p><span>${esc}</span></p>`, css: `p{margin:0;text-align:${s.align};${""}} span{${cssText}}`, width: w, height: h, position: "center" },
+      position: "center",
+      offset: { x: (s.x - 50) / 100, y: (50 - s.y) / 100 },
+      transition: s.animation === "fade" ? { in: "fade", out: "fade" } : s.animation === "slide" ? { in: "slideUp" } : s.animation === "pop" ? { in: "zoom" } : undefined,
+      start: Number(c.start_seconds) || 0, length: Math.max(0.2, Number(c.end_seconds) - Number(c.start_seconds)),
+    };
+  });
   const tracks = [captions, visual, audio].filter((x) => x.length).map((clips) => ({ clips }));
   return { timeline: { background: "#000000", tracks }, output: { format: "mp4", fps: m.fps || 30, size: { width: m.width, height: m.height } } };
 }
