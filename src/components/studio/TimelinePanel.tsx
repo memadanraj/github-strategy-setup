@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, RotateCcw, Wand2, Captions as CaptionsIcon, Lock, Unlock, Volume2, VolumeX } from "lucide-react";
+import { Play, Pause, RotateCcw, Wand2, Captions as CaptionsIcon, Lock, Unlock, Volume2, VolumeX, Undo2, Redo2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { rebuildProjectTimeline, regenerateProjectCaptions } from "@/lib/timeline-operations";
 import { CaptionCueEditor, ClipInspectorForm, TimelineSettingsForm } from "@/components/studio/TimelineEditForms";
+import { createTimelineClipEdit, recordTimelineEdit, takeTimelineUndo, takeTimelineRedo, type TimelineHistory } from "@/lib/timeline-history";
 import {
   validateTimelineCaptionPatch,
   validateTimelineClipPatch,
@@ -30,6 +31,9 @@ export function TimelinePanel({ project }: { project: Project }) {
   const [building, setBuilding] = useState(false);
   const [captioning, setCaptioning] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [history, setHistory] = useState<TimelineHistory>({ undo: [], redo: [] });
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const historyInFlight = useRef(false);
 
   const { data: scenes = [] } = useQuery({
     queryKey: ["scenes", project.id],
@@ -144,23 +148,83 @@ export function TimelinePanel({ project }: { project: Project }) {
     ]);
   }
 
-  async function updateClip(id:string, patch:any): Promise<boolean> {
-    const current = clips.find((clip:any) => clip.id === id) as TimelineClipTiming | undefined;
+  async function persistClipPatch(id: string, patch: Record<string, unknown>): Promise<boolean> {
+    const current = clips.find((clip: any) => clip.id === id) as TimelineClipTiming | undefined;
     if (!current) { toast.error("Clip not found or no longer available."); return false; }
     const invalid = validateTimelineClipPatch(patch, current);
     if (invalid) { toast.error(invalid); return false; }
     try {
-      const r = await db.from("timeline_clips")
-        .update({...patch,updated_at:new Date().toISOString()})
-        .eq("project_id",project.id).eq("id",id)
-        .select("id").maybeSingle();
-      if (r.error) { toast.error(r.error.message); return false; }
-      if (!r.data) { toast.error("Clip not found or no longer available."); return false; }
-      await qc.invalidateQueries({queryKey:["timeline_clips",project.id]});
+      const result = await db.from("timeline_clips")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("project_id", project.id)
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
+      if (result.error) { toast.error(result.error.message); return false; }
+      if (!result.data) { toast.error("Clip not found or no longer available."); return false; }
+      await qc.invalidateQueries({ queryKey: ["timeline_clips", project.id] });
       return true;
     } catch {
       toast.error("Could not save the clip. Check your connection and try again.");
       return false;
+    }
+  }
+
+  async function updateClip(id: string, patch: Record<string, unknown>): Promise<boolean> {
+    if (historyInFlight.current) {
+      toast.error("Wait for the current timeline edit to finish saving.");
+      return false;
+    }
+    const current = clips.find((clip: any) => clip.id === id);
+    if (!current) { toast.error("Clip not found or no longer available."); return false; }
+    const invalid = validateTimelineClipPatch(patch, current);
+    if (invalid) { toast.error(invalid); return false; }
+    const edit = createTimelineClipEdit(id, current, patch);
+    historyInFlight.current = true;
+    setHistoryBusy(true);
+    try {
+      const saved = await persistClipPatch(id, patch);
+      if (saved && edit) setHistory((previous) => recordTimelineEdit(previous, edit));
+      return saved;
+    } finally {
+      historyInFlight.current = false;
+      setHistoryBusy(false);
+    }
+  }
+
+  async function undoClipEdit() {
+    if (historyInFlight.current) return;
+    const action = takeTimelineUndo(history);
+    if (!action.edit) return;
+    historyInFlight.current = true;
+    setHistoryBusy(true);
+    try {
+      const saved = await persistClipPatch(action.edit.clipId, action.edit.before);
+      if (!saved) return;
+      setHistory(action.history);
+      setSelected(action.edit.clipId);
+      toast.success("Clip edit undone.");
+    } finally {
+      historyInFlight.current = false;
+      setHistoryBusy(false);
+    }
+  }
+
+  async function redoClipEdit() {
+    if (historyInFlight.current) return;
+    const action = takeTimelineRedo(history);
+    if (!action.edit) return;
+    historyInFlight.current = true;
+    setHistoryBusy(true);
+    try {
+      const saved = await persistClipPatch(action.edit.clipId, action.edit.after);
+      if (!saved) return;
+      setHistory(action.history);
+      setSelected(action.edit.clipId);
+      toast.success("Clip edit redone.");
+    } finally {
+      historyInFlight.current = false;
+      setHistoryBusy(false);
     }
   }
   async function deleteClip(id:string) {
@@ -226,6 +290,8 @@ export function TimelinePanel({ project }: { project: Project }) {
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="panel" onClick={buildTimeline} disabled={building}><Wand2/>{building?"Building…":"Build timeline"}</Button>
           <Button size="sm" variant="panel" onClick={generateCaptions} disabled={captioning}><CaptionsIcon/>{captioning?"Generating…":"Generate captions"}</Button>
+          <Button size="sm" variant="panel" onClick={undoClipEdit} disabled={historyBusy || history.undo.length === 0} aria-label="Undo clip edit"><Undo2/> Undo</Button>
+          <Button size="sm" variant="panel" onClick={redoClipEdit} disabled={historyBusy || history.redo.length === 0} aria-label="Redo clip edit"><Redo2/> Redo</Button>
           <Button size="icon" variant="panel" onClick={()=>setPlaying(p=>!p)} aria-label={playing?"Pause":"Play"}>{playing?<Pause/>:<Play/>}</Button>
           <Button size="icon" variant="panel" onClick={()=>{setPlaying(false);setTime(0)}}><RotateCcw/></Button>
         </div>

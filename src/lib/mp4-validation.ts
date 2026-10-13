@@ -1,5 +1,17 @@
 export const MAX_RENDER_EXPORT_BYTES = 512 * 1024 * 1024;
 
+/** Scene clips use a smaller download budget than final rendered exports. */
+export const MAX_GENERATED_CLIP_BYTES = 128 * 1024 * 1024;
+
+/** Reject provider media that cannot safely be stored with an .mp4 extension. */
+export function validateGeneratedClip(
+  bytes: Uint8Array,
+  contentType: string,
+  maxBytes = MAX_GENERATED_CLIP_BYTES,
+): void {
+  validateMp4Container(bytes, contentType, maxBytes);
+}
+
 export class Mp4ValidationError extends Error {
   constructor(message: string) {
     super(message);

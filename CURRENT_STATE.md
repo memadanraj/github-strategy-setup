@@ -109,3 +109,10 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - The structural checks require file-type, movie and non-empty media-data boxes; truncated/oversized boxes and malformed/non-MP4 responses are rejected.
 - Invalid container output becomes a failed render, rather than a ready export. CI passed lint, typecheck, **29 test files** (7 MP4 validation tests), and production build on code commit `611893c00bc9826d24d31581e58552a592d8d664`.
 - This is not a codec-level validation or an end-to-end playback result. A real renderer, storage, export-download and browser playback test is still required in staging.
+
+
+## Update — clip MP4 integrity and timeline undo/redo (October 13, 2026)
+
+- Generated scene clips now use an MP4-compatible MIME + ISO BMFF structural validation path with a 128 MiB cap before storage/asset/scene/job completion. A stale or inaccessible provider output URL falls back to the authenticated provider-content endpoint.
+- Timeline clip editing includes bounded in-memory undo/redo history for successfully persisted clip edits, limited to 100 steps. A failed save does not commit a history entry.
+- The clip checks validate container structure, not codec decoding or real playback. Provider-backed download, asset linking, media playback, and the staging database migration/RLS checks remain release gates.
