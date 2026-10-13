@@ -206,3 +206,6 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - A confirmed video ID remains associated with a `published` record even if thumbnail/finalization fails; an ambiguous upload keeps the row in `uploading` and tells the user to check YouTube before retrying. Final publication writes now verify that the database returned the expected row.
 - Updated the publishing UI to show follow-up warnings for videos that are already live. No schema migration was added.
 - Staging verification still must exercise successful upload, thumbnail failure, local database write failure, and a lost/ambiguous upload response with a test channel.
+
+
+- Verification evidence: [CI run 38407418981](https://github.com/memadanraj/github-strategy-setup/actions/runs/38407418981) passed lint, type-check, **33 test files / 267 tests**, and production build for code commit `e1ec862b8751614b93b55ec3c107cfa1b1164e9e`. An initial type-check failure from test result narrowing was corrected and rerun successfully. Real YouTube upload/thumbnail behavior still needs a test-channel staging run.
