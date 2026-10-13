@@ -74,3 +74,8 @@ YouTube publishing now confirms project ownership through the authenticated Supa
 ## Latest hardening update — YouTube partial-success handling
 
 After YouTube returns a confirmed video ID, a later thumbnail or local database failure no longer blindly turns the publication into `failed`. The app preserves the YouTube video ID/URL, attempts a checked local reconciliation, and warns users not to re-upload when the remote upload outcome is uncertain.
+
+
+## Latest hardening update — bounded Paddle webhooks
+
+The public Paddle webhook enforces a 1 MiB maximum raw request body while streaming the request, before signature verification, JSON parsing, or database access. The implementation treats `Content-Length` as an early-rejection hint and still counts actual streamed bytes.

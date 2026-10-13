@@ -112,3 +112,10 @@ Mark every step `PASS`, `FAIL`, or `BLOCKED` with evidence. Do not call the app 
 - [ ] Force thumbnail upload to fail after YouTube accepts the video. Confirm the publication stays `published`, the UI explains the follow-up failure, and the user is not prompted to retry the video upload.
 - [ ] Force the final database update to fail after YouTube returns a video ID. Confirm recovery preserves the ID/URL where possible and otherwise displays the explicit do-not-retry reconciliation message.
 - [ ] Simulate an upload request whose response is lost after the PUT starts. Confirm the record is kept as `uploading` with a warning to check YouTube before retrying, rather than being marked `failed` automatically.
+
+
+### Paddle webhook request-size regression
+
+- [ ] Confirm a correctly signed normal event under 1 MiB still processes and returns 200.
+- [ ] Send an over-limit body with oversized or missing `Content-Length`; confirm HTTP 413 is returned before signature verification/database access and no Paddle event row is created.
+- [ ] Confirm a valid body at the byte limit is not rejected solely due to its declared length.

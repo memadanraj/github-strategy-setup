@@ -8,6 +8,7 @@ import {
   getCheckoutIntentId,
   hasExactCheckoutPrice,
 } from "./paddle-validation";
+import { readBoundedRequestText } from "./paddle-webhook-body";
 
 type CheckoutIntent = {
   id: string;
@@ -482,7 +483,14 @@ async function claimRetryableEvent(db: any, eventId: string, previousStatus: str
 }
 
 export async function handlePaddleWebhook(request: Request) {
-  const payload = await request.text();
+  const body = await readBoundedRequestText(request);
+  if (!body.ok) {
+    return new Response(
+      body.reason === "too_large" ? "Webhook payload too large" : "Could not read webhook payload",
+      { status: body.reason === "too_large" ? 413 : 400 },
+    );
+  }
+  const payload = body.text;
   const signature = request.headers.get("paddle-signature") || "";
   if (!await verifyPaddleSignature(payload, signature, paddleEnv("PADDLE_WEBHOOK_SECRET"))) {
     return new Response("Invalid signature", { status: 400 });
