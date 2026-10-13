@@ -2,7 +2,7 @@
 
 This is an evidence-based phase tracker for the master plan. A UI control or source file alone is not proof a feature is complete. `COMPLETE` should be used only after persistence, security, error paths, and relevant tests pass.
 
-**Working branch:** `hardening/phase-0-security-and-ci`  
+**Working branch:** `hardening/phase-3-media-persistence`  
 **Target:** draft PR, not `main`  
 **Status date:** 2026-10-12
 
@@ -11,16 +11,16 @@ This is an evidence-based phase tracker for the master plan. A UI control or sou
 | 0. Repository audit | PARTIAL | Stack, routes, database/auth, provider keys, tests, and migration inconsistencies inspected. Continue auditing during each implementation step. |
 | 1. Foundation (auth, ownership, persistence, errors) | TEST | Existing Supabase auth/RLS; env secrets removed from branch tip. Add automated cross-user access tests and verify signup/login/reset and persistence against staging. |
 | 2. Projects and scenes | PARTIAL / TEST | Scene breakdown validates AI output and uses `0015` for transactional replacement. Version saves/restores use `0017`; creation, deletion, and reordering use owner-checked transactional RPCs in `0019` and `0020`. Client tests cover RPC contracts and failures. Database execution, RLS, asset cascade behavior, and concurrent edits still require staging integration tests. |
-| 3. Central jobs | PARTIAL / TEST | Migration `0013_job_pipeline_hardening.sql` adds events, active-clip dedupe, atomic download claim, and idempotent terminal state/refund. Async clip start validates provider-job-ID persistence; AI job completion retries once and failures no longer claim a refund unless the refund RPC succeeds. Unit tests cover settlement retry and refund-RPC failure. Staging migration application and concurrency tests remain. |
-| 4. Provider abstraction | PARTIAL | Render/audio adapters exist. Text/image/video still call gateway from domain functions; define common provider response schemas and add adapter contract tests. |
+| 3. Central jobs | PARTIAL / TEST | Async clip start validates provider-job-ID persistence; clip status polling retries transient network/timeouts until the global deadline. Visual jobs and synchronous AI tasks use `fail_generation_job_checked`; lost completion responses are resolved against terminal DB state, and refunds are reported only for confirmed refunded terminal states. Unit tests cover refund/unknown/no-reservation/already-complete cases. Migrations `0013` and `0021`, concurrency, and staging tests remain. |
+| 4. Provider abstraction | PARTIAL / TEST | Added bounded visual-provider HTTP helpers: image generation timeout 120s, video start 45s, polling 20s; metadata JSON capped at 512 KiB and image JSON capped at 44 MiB. Network/timeouts are safe typed failures; transient poll failures retry. Tests cover timeout/network failures, response-size limits and malformed JSON. Shared adapters/retries across all providers and staging behavior remain. |
 | 5. Script generation | EXISTING / TEST | Research/hooks/script/scene drafting flows exist. Mainline operations still execute synchronously and structured generation/persistence needs failure tests. |
-| 6. Video clip generation | PARTIAL / TEST | Client-polled provider job exists; downloader bounds bytes/time, checks HTTPS/redirects and avoids forwarding gateway secrets to third-party hosts. Provider job IDs/status/output URLs are normalized and malformed responses have unit coverage. Need staging provider success/failure/timeout/retry/cancel tests and apply migration 0013 first. |
+| 6. Video clip generation | PARTIAL / TEST | Start/poll requests are bounded, transient poll network/timeouts are retried, provider status JSON has a size limit, and the overall job has a 15-minute deadline. Downloader bounds bytes/time, validates HTTPS/redirects/content type and does not forward gateway secrets to third-party hosts. Provider start/poll, cancel, retries and actual result playback still need staging validation. |
 | 7. Voice generation | EXISTING / TEST | Voice provider code and UI exist, but live verification requires `ELEVENLABS_API_KEY` and/or supported voice-provider credentials. |
 | 8. Captions | EXISTING / TEST | Caption/transcription model exists; timing, edit, export-format and rendered-caption acceptance tests remain. |
 | 9. Basic editor/timeline | EXISTING / TEST | Timeline tracks/clips, audio/text/caption data and UI exist. Drag/trim/split/undo/redo and persistence tests remain. |
 | 10. Rendering | PARTIAL | Shotstack and compatible HTTP renderer adapters exist. Clear missing-provider failure and bounded MP4 result download added. Render-provider tests added; end-to-end render/playback and idempotent retry tests remain. |
 | 11. Export and sharing | PARTIAL / TEST | Share links store only SHA-256 token hashes, support optional scrypt password protection, 1/7/30-day or no-expiry links, revocation, a password lockout and temporary signed MP4 playback. Migration `0018`; token/password primitives are unit-tested. Route, storage, expiry, revocation, and migration behavior require staging verification. |
-| 12. Credits | EXISTING / TEST | SQL reserve/complete/fail/refund ledger exists. Concurrency, idempotency, reconciliation, actual-cost reporting, and billing/job integration tests remain. |
+| 12. Credits | PARTIAL / TEST | Synchronous AI tasks now use `fail_generation_job_checked` instead of the older void failure RPC. Refund wording depends on returned terminal state; `already_complete` plus a persisted result returns success, while unknown settlement triggers reconciliation messaging. Ledger race/concurrency, idempotency and live billing/job integration tests remain. |
 | 13. Billing | PARTIAL | Paddle client, webhook signature/event handling and tables exist. Price IDs and sandbox lifecycle tests remain; legacy Stripe SQL files/migration order need careful reconciliation. |
 | 14. Admin | EXISTING / TEST | Admin users/plans/credits/jobs UI/server code exists. Role-denial and audit-trail tests remain. |
 | 15. AI Director | MISSING / FUTURE | Requires a proposed change plan, preview/approval, safe apply and undo/versioning. |
@@ -46,7 +46,7 @@ Do not claim production readiness until a staging user can sign up, create a pro
 
 - Added a pure provider-response contract for video job IDs, status, output URL variants, and error messages, with unit tests for valid, malformed, missing, and alternate response shapes.
 - Async clip creation now checks the database write for the external provider job ID. If persistence fails, the existing failure/refund path runs instead of returning a job that can only spin until timeout.
-- These code changes are committed to the working branch. They are not considered verified until the workflow for the latest head passes; staging database/provider behavior remains unverified.
+- Provider HTTP tests cover timeout/network mapping, timeout bounds, limited chunked response reads, oversized `Content-Length`, malformed JSON and empty responses. Synchronous AI settlement tests cover lost completion responses and checked refund states. Code commit `3f89c3a3e830fcef99c0c0ce6426ac597ccec6bf` passed CI; live database/provider behavior remains unverified.
 
 
 ## Master plan — exact implementation order and gates

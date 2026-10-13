@@ -67,6 +67,8 @@ Set the server-only secret:
 
 The current implementation calls the Lovable AI Gateway for structured text, image generation, and video clips. The key must only exist on the server. AI jobs may incur provider costs; keep credit reservations, completion, and refunds server-authoritative.
 
+Visual gateway calls use bounded timeouts: image generation up to 120 seconds, video job creation up to 45 seconds, and each video status poll up to 20 seconds. A clip still has a 15-minute overall deadline. Video metadata responses are capped at 512 KiB and image generation JSON is capped at 44 MiB; over-limit or malformed responses fail explicitly. Poll network/timeouts retry until the overall deadline. Mocked CI tests cover the helper behavior, but real provider response sizes, transient outages and generated media must be validated in staging.
+
 ## 4. Voice generation
 
 Set:

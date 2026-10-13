@@ -2,8 +2,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { downloadRemoteMedia, remoteMediaHeaderVariants } from "./remote-media.server";
+import { fetchVisualProvider, readProviderJson, readResponseTextLimited, VisualProviderRequestError } from "./visual-provider-http.server";
 import { normalizeProviderVideoStatus, readProviderJobId, readProviderVideoError, readProviderVideoUrl } from "./video-job-contract";
 import {
+  cleanupGeneratedMediaRecords,
   persistGeneratedVisual,
   settleVisualJobFailure,
   type VisualJobFailureState,
@@ -21,17 +23,31 @@ function gatewayHeaders(apiKey: string, json = true) {
 }
 
 async function gatewayError(res: Response, fallback: string) {
-  const body = await res.text().catch(() => "");
+  const body = await readResponseTextLimited(res, 8 * 1024).catch(() => "");
   let detail = "";
   try {
-    const json = JSON.parse(body);
-    detail = json?.error?.message ?? json?.message ?? json?.detail ?? "";
+    const json: unknown = JSON.parse(body);
+    if (typeof json === "object" && json !== null) {
+      const record = json as Record<string, unknown>;
+      const error = record["error"];
+      const providerMessage = typeof error === "object" && error !== null
+        ? (error as Record<string, unknown>)["message"]
+        : undefined;
+      if (typeof providerMessage === "string") {
+        detail = providerMessage;
+      } else if (typeof record["message"] === "string") {
+        detail = record["message"];
+      } else if (typeof record["detail"] === "string") {
+        detail = record["detail"];
+      }
+    }
   } catch {
-    detail = body.slice(0, 240);
+    // Error bodies are intentionally bounded; unstructured content is not reflected.
   }
   if (res.status === 429) return "AI is busy right now. Please try again shortly.";
   if (res.status === 402) return "AI credits for this workspace are exhausted.";
-  return detail ? `${fallback} (${detail})` : `${fallback} (${res.status}).`;
+  const safeDetail = detail.replace(/[\\r\\n\\t]/g, " ").slice(0, 160);
+  return safeDetail ? `${fallback} (${safeDetail})` : `${fallback} (${res.status}).`;
 }
 
 function clipSeconds(sceneDuration: number): "4" | "6" | "8" {
@@ -153,7 +169,7 @@ function composePrompt(project: any, characters: any[], visualPrompt: string) {
 }
 
 async function generateImage(apiKey: string, model: string, prompt: string, vertical: boolean): Promise<Buffer> {
-  const res = await fetch(`${GATEWAY}/images/generations`, {
+  const res = await fetchVisualProvider(`${GATEWAY}/images/generations`, {
     method: "POST",
     headers: gatewayHeaders(apiKey),
     body: JSON.stringify({
@@ -162,21 +178,24 @@ async function generateImage(apiKey: string, model: string, prompt: string, vert
       n: 1,
       size: vertical ? "1024x1536" : "1536x1024",
     }),
-  });
+  }, 120_000);
 
   if (!res.ok) {
     throw new Error(await gatewayError(res, "Image generation failed"));
   }
 
-  const json = await res.json();
+  const json = await readProviderJson<{ data?: Array<{ b64_json?: unknown; url?: unknown }> }>(
+    res,
+    44 * 1024 * 1024,
+  );
   const item = json.data?.[0];
 
-  if (item?.b64_json) {
+  if (typeof item?.b64_json === "string" && item.b64_json.length > 0) {
     if (item.b64_json.length > 40 * 1024 * 1024) throw new Error("Generated image exceeds the configured size limit.");
     return Buffer.from(item.b64_json, "base64");
   }
 
-  if (item?.url) {
+  if (typeof item?.url === "string" && item.url.trim()) {
     const bytes = await fetchMediaBytes(item.url, apiKey);
     if (bytes) return bytes;
   }
@@ -296,20 +315,25 @@ async function runVisualJob(opts: {
     },
     cleanupAsset: async (out) => {
       const sceneColumn = out.kind === "image" ? "image_path" : "clip_path";
-      const sceneCleanup = await supabaseAdmin
-        .from("scenes")
-        .update(out.kind === "image" ? { image_path: null } : { clip_path: null })
-        .eq("id", opts.sceneId)
-        .eq("project_id", opts.projectId)
-        .eq(sceneColumn, out.path);
-      if (sceneCleanup.error) throw new Error("Scene media reference cleanup failed.");
-
-      const { error } = await supabaseAdmin
-        .from("assets")
-        .delete()
-        .eq("project_id", opts.projectId)
-        .eq("storage_path", out.path);
-      if (error) throw new Error("Asset-record cleanup failed.");
+      await cleanupGeneratedMediaRecords({
+        clearSceneReference: async () => {
+          const sceneCleanup = await supabaseAdmin
+            .from("scenes")
+            .update(out.kind === "image" ? { image_path: null } : { clip_path: null })
+            .eq("id", opts.sceneId)
+            .eq("project_id", opts.projectId)
+            .eq(sceneColumn, out.path);
+          if (sceneCleanup.error) throw new Error("Scene media reference cleanup failed.");
+        },
+        deleteAssetRecord: async () => {
+          const { error } = await supabaseAdmin
+            .from("assets")
+            .delete()
+            .eq("project_id", opts.projectId)
+            .eq("storage_path", out.path);
+          if (error) throw new Error("Asset-record cleanup failed.");
+        },
+      });
     },
     cleanupUpload: async (out) => {
       const { error } = await supabaseAdmin.storage.from("project-assets").remove([out.path]);
@@ -422,7 +446,7 @@ export const generateSceneClip = createServerFn({ method: "POST" })
       const apiKey = process.env["LOVABLE_API_KEY"];
       if (!apiKey) throw new Error("AI is not configured");
       const vertical = ctx.project.format === "short";
-      const start = await fetch(`${GATEWAY}/videos`, {
+      const start = await fetchVisualProvider(`${GATEWAY}/videos`, {
         method: "POST",
         headers: gatewayHeaders(apiKey),
         body: JSON.stringify({
@@ -431,9 +455,9 @@ export const generateSceneClip = createServerFn({ method: "POST" })
           size: vertical ? "720x1280" : "1280x720",
           seconds: clipSeconds(Number(scene.duration_seconds) || 5),
         }),
-      });
+      }, 45_000);
       if (!start.ok) throw new Error(await gatewayError(start, "Clip generation failed to start"));
-      const job = await start.json().catch(() => null);
+      const job = await readProviderJson<unknown>(start, 256 * 1024).catch(() => null);
       const providerJobId = readProviderJobId(job);
       if (!providerJobId) throw new Error("Clip generation failed to start: gateway returned no valid job ID.");
       const { error: providerJobWriteError } = await supabaseAdmin
@@ -490,13 +514,31 @@ export const checkSceneClip = createServerFn({ method: "POST" })
     try {
       const apiKey = process.env["LOVABLE_API_KEY"];
       if (!apiKey) throw new Error("AI is not configured");
-      const poll = await fetch(`${GATEWAY}/videos/${encodeURIComponent(providerId)}`, { headers: gatewayHeaders(apiKey, false) });
+      let poll: Response;
+      try {
+        poll = await fetchVisualProvider(
+          `${GATEWAY}/videos/${encodeURIComponent(providerId)}`,
+          { headers: gatewayHeaders(apiKey, false) },
+          20_000,
+        );
+      } catch (error) {
+        if (error instanceof VisualProviderRequestError && error.transient) {
+          // A single poll timeout/network failure should not fail a valid provider job.
+          // Subsequent polls retry; the global clip deadline still bounds its lifetime.
+          return { status: "running" as const };
+        }
+        throw error;
+      }
       if (!poll.ok) {
         if (poll.status === 429 || poll.status >= 500) return { status: "running" as const };
         return fail(await gatewayError(poll, "Clip status check failed"));
       }
-      const info = await poll.json().catch(() => ({}));
-      const providerStatus = normalizeProviderVideoStatus(info.status);
+      const info = await readProviderJson<unknown>(poll, 512 * 1024);
+      const providerStatus = normalizeProviderVideoStatus(
+        typeof info === "object" && info !== null
+          ? (info as Record<string, unknown>)["status"]
+          : undefined,
+      );
       if (providerStatus === "failed") {
         return fail(readProviderVideoError(info) ?? "Clip generation failed.");
       }
@@ -583,12 +625,25 @@ export const checkSceneClip = createServerFn({ method: "POST" })
             completionMayHaveSucceeded: completionStarted && sceneAttached && Boolean(assetId),
             cleanupAsset: assetRegistrationAttempted
               ? async () => {
-                  const { error } = await supabaseAdmin
-                    .from("assets")
-                    .delete()
-                    .eq("project_id", job.project_id)
-                    .eq("storage_path", path);
-                  if (error) throw new Error("Asset record cleanup failed.");
+                  await cleanupGeneratedMediaRecords({
+                    clearSceneReference: async () => {
+                      const { error } = await supabaseAdmin
+                        .from("scenes")
+                        .update({ clip_path: null })
+                        .eq("id", sceneId)
+                        .eq("project_id", job.project_id)
+                        .eq("clip_path", path);
+                      if (error) throw new Error("Scene clip reference cleanup failed.");
+                    },
+                    deleteAssetRecord: async () => {
+                      const { error } = await supabaseAdmin
+                        .from("assets")
+                        .delete()
+                        .eq("project_id", job.project_id)
+                        .eq("storage_path", path);
+                      if (error) throw new Error("Asset record cleanup failed.");
+                    },
+                  });
                 }
               : undefined,
             cleanupUpload: uploadAttempted

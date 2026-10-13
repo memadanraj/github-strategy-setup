@@ -34,17 +34,19 @@ This file distinguishes **code present**, **automated checks**, and **live/stagi
 
 ## Recent verified branch work
 
-The latest code head verified by GitHub Actions is `1097f0e682c580e4fd9f08fac2006923fc902c53`. CI passed:
+The previous hardening PR was merged into `main`. The active follow-on branch is `hardening/phase-3-media-persistence`; it has not been merged.
+
+Code commit `3f89c3a3e830fcef99c0c0ce6426ac597ccec6bf` passed GitHub Actions:
 
 - locked Bun dependency installation
 - lint (inherited formatting/explicit-`any` findings remain warnings)
 - TypeScript typecheck
-- unit/component tests (**18 test files passed**)
+- unit/component tests (**27 test files passed**)
 - production build
 
 Added or improved on this branch: environment-file ignore rules; secure remote-media handling; normalized async video job contracts; AI task completion/refund error handling; create-project/writing failure paths; a persisted production plan; atomic scene replacement/version restore/reorder/create/delete; asset validation/cleanup; secure public export sharing; Paddle webhook and credit-ledger tests.
 
-These changes live on `hardening/phase-0-security-and-ci` and are **not merged into `main`**.
+The earlier hardening changes were merged to `main`. The current follow-on work lives on `hardening/phase-3-media-persistence` and remains isolated from `main` until its draft PR is reviewed/merged.
 
 ## Database and deployment warning
 
@@ -75,3 +77,12 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - Voiceover cleanup attempts to restore the previous scene-audio association before removing new rows; preview files use unique storage paths; music and voiceover cleanup checks row deletion and file removal. If database cleanup fails, the shared cleanup helper preserves media files that may still be referenced.
 - Added `src/test/audio-job-settlement.test.ts` for completion RPC failures, confirmed refunds, unknown settlement, and already-complete handling. Latest CI run passes with **21 test files**.
 - The code is still branch-only. Audio provider, storage, and rollback behavior require staging end-to-end tests; provider-created remote voice clones cannot always be compensated by local database cleanup alone.
+
+
+## Update — bounded visual-provider HTTP and synchronous AI settlement (October 12, 2026)
+
+- Image generation is bounded to 120 seconds, video-job creation to 45 seconds, and each clip status poll to 20 seconds; the overall clip deadline remains 15 minutes.
+- Visual provider JSON responses use byte limits (512 KiB for metadata/status responses; 44 MiB for image-generation JSON). Malformed responses fail explicitly. Transient poll network/timeouts retry rather than immediately failing the job.
+- Synchronous text-AI tasks use the checked failure/refund RPC. A lost completion response is reconciled against the database; if the job is already complete and the result was persisted, the request returns success. Refund claims require a confirmed terminal state.
+- CI passed lint, typecheck, 27 test files, and production build on code commit `3f89c3a3e830fcef99c0c0ce6426ac597ccec6bf`. The following documentation-only commit has not had a separate workflow run yet.
+- Live provider timeouts, database races, and actual media responses still require staging validation.

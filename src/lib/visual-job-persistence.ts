@@ -23,6 +23,15 @@ export type VisualPersistenceResult<T extends PreparedVisual> =
   | { ok: true; output: T; assetId: string }
   | { ok: false; error: string };
 
+export async function cleanupGeneratedMediaRecords(operations: {
+  clearSceneReference: () => Promise<void>;
+  deleteAssetRecord: () => Promise<void>;
+}): Promise<void> {
+  // Preserve media unless its scene reference has been removed successfully.
+  await operations.clearSceneReference();
+  await operations.deleteAssetRecord();
+}
+
 type FailureCleanup = {
   completionMayHaveSucceeded?: boolean;
   cleanupAsset?: () => Promise<void>;

@@ -74,19 +74,61 @@ describe("runAiTask credit settlement", () => {
     });
   });
 
-  it("does not claim a refund when the failure settlement RPC also fails", async () => {
+  it("does not claim a refund when the checked settlement RPC fails", async () => {
     mocks.generateStructured.mockRejectedValueOnce(new Error("provider timeout"));
     mocks.adminRpc.mockResolvedValueOnce({ data: null, error: new Error("refund rpc failed") });
     const result = await runAiTask(options(makeSupabase()));
     expect(result).toEqual({
       ok: false,
-      error: "provider timeout The credit refund could not be confirmed; this job needs admin reconciliation.",
+      error: "provider timeout Credit/refund state could not be confirmed; this job needs admin reconciliation.",
+    });
+    expect(mocks.adminRpc).toHaveBeenCalledWith("fail_generation_job_checked", {
+      _job_id: "job-1",
+      _error: "provider timeout",
     });
   });
 
-  it("reports a confirmed refund when failure settlement succeeds", async () => {
+  it("reports a confirmed refund only when the checked RPC confirms it", async () => {
     mocks.generateStructured.mockRejectedValueOnce(new Error("provider timeout"));
+    mocks.adminRpc.mockResolvedValueOnce({ data: "failed_refunded", error: null });
     const result = await runAiTask(options(makeSupabase()));
     expect(result).toEqual({ ok: false, error: "provider timeout Your credits were refunded." });
+  });
+
+  it("does not claim a refund when no reservation existed", async () => {
+    mocks.generateStructured.mockRejectedValueOnce(new Error("provider timeout"));
+    mocks.adminRpc.mockResolvedValueOnce({ data: "failed_without_reservation", error: null });
+    const result = await runAiTask(options(makeSupabase()));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("no reserved credits");
+      expect(result.error).not.toContain("Your credits were refunded.");
+    }
+  });
+
+  it("preserves a successful result if completion committed but both responses failed", async () => {
+    mocks.adminRpc
+      .mockResolvedValueOnce({ data: null, error: new Error("connection reset") })
+      .mockResolvedValueOnce({ data: null, error: new Error("connection reset") })
+      .mockResolvedValueOnce({ data: "already_complete", error: null });
+
+    const result = await runAiTask(options(makeSupabase()));
+
+    expect(result).toEqual({ ok: true, value: "saved" });
+    expect(mocks.adminRpc).toHaveBeenNthCalledWith(3, "fail_generation_job_checked", {
+      _job_id: "job-1",
+      _error: "AI output may have been saved, but completion settlement failed.",
+    });
+  });
+
+  it("does not claim a refund for an unknown job state", async () => {
+    mocks.generateStructured.mockRejectedValueOnce(new Error("provider timeout"));
+    mocks.adminRpc.mockResolvedValueOnce({ data: "future_state", error: null });
+    const result = await runAiTask(options(makeSupabase()));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("Credit/refund state could not be confirmed");
+      expect(result.error).not.toContain("Your credits were refunded.");
+    }
   });
 });

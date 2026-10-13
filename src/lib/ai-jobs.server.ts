@@ -5,16 +5,51 @@ import { generateStructured } from "./ai-gateway.server";
 
 export type TaskResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
-async function failJob(jobId: string, message: string): Promise<unknown | null> {
-  try {
-    const { error } = await supabaseAdmin.rpc("fail_generation_job", {
-      _job_id: jobId,
-      _error: message,
-    });
-    return error ?? null;
-  } catch (error) {
-    return error;
+type GenerationJobFailureState =
+  | "failed_refunded"
+  | "failed_without_reservation"
+  | "already_failed"
+  | "already_complete"
+  | "not_found"
+  | "not_active";
+
+async function failJobChecked(jobId: string, message: string): Promise<GenerationJobFailureState> {
+  const { data, error } = await supabaseAdmin.rpc("fail_generation_job_checked", {
+    _job_id: jobId,
+    _error: message.slice(0, 500),
+  });
+  if (error || typeof data !== "string") {
+    throw new Error("Could not confirm generation job settlement.");
   }
+
+  const states: readonly GenerationJobFailureState[] = [
+    "failed_refunded",
+    "failed_without_reservation",
+    "already_failed",
+    "already_complete",
+    "not_found",
+    "not_active",
+  ];
+  if (!states.includes(data as GenerationJobFailureState)) {
+    throw new Error("Generation job settlement returned an unknown state.");
+  }
+  return data as GenerationJobFailureState;
+}
+
+function failureResult<T>(message: string, state: GenerationJobFailureState): TaskResult<T> {
+  if (state === "failed_refunded" || state === "already_failed") {
+    return { ok: false, error: `${message} Your credits were refunded.` };
+  }
+  if (state === "failed_without_reservation") {
+    return { ok: false, error: `${message} The job failed, but no reserved credits were available to refund.` };
+  }
+  if (state === "already_complete") {
+    return { ok: false, error: `${message} The job is already complete; credit/refund status was not changed.` };
+  }
+  if (state === "not_found") {
+    return { ok: false, error: `${message} The job record was not found, so a credit refund could not be confirmed.` };
+  }
+  return { ok: false, error: `${message} The job state is not active; credit state needs admin reconciliation.` };
 }
 
 export async function runAiTask<T, R>(opts: {
@@ -53,6 +88,9 @@ export async function runAiTask<T, R>(opts: {
     };
   }
 
+  let persistedValue: R | undefined;
+  let persistenceFinished = false;
+
   try {
     const apiKey = process.env["LOVABLE_API_KEY"];
     if (!apiKey) throw new Error("AI is not configured");
@@ -67,10 +105,12 @@ export async function runAiTask<T, R>(opts: {
     });
 
     const value = await opts.persist(result);
+    persistedValue = value;
+    persistenceFinished = true;
+
     const completionArgs = { _job_id: jobId as string, _output: { task: opts.taskSlug } };
 
-    // Completion is idempotent in the hardened SQL migration. Retry once so a
-    // transient database error doesn't leave a successful job reserved forever.
+    // Retrying is safe because complete_generation_job is a guarded terminal transition.
     let { error: completionError } = await supabaseAdmin.rpc("complete_generation_job", completionArgs);
     if (completionError) {
       console.error(`${opts.taskSlug} completion failed; retrying once`, completionError);
@@ -78,33 +118,34 @@ export async function runAiTask<T, R>(opts: {
     }
 
     if (completionError) {
-      console.error(`${opts.taskSlug} completion failed after retry`, completionError);
-      const refundError = await failJob(jobId as string, "Job output was persisted but completion settlement failed.");
-      if (refundError) {
-        console.error(`${opts.taskSlug} credit settlement needs reconciliation`, refundError);
-        return {
-          ok: false,
-          error: "The result may have been saved, but job settlement failed. Credit state needs admin reconciliation.",
-        };
-      }
-      return {
-        ok: false,
-        error: "The result was generated, but final settlement failed. The job was marked failed and its reservation was released.",
-      };
+      console.error(`${opts.taskSlug} completion failed after retry`);
+      throw new Error("AI output may have been saved, but completion settlement failed.");
     }
 
     return { ok: true, value };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "AI generation failed";
-    console.error(`${opts.taskSlug} failed`, e);
-    const refundError = await failJob(jobId as string, msg);
-    if (refundError) {
-      console.error(`${opts.taskSlug} refund needs reconciliation`, refundError);
+  } catch (cause) {
+    const message = cause instanceof Error && cause.message.trim()
+      ? cause.message
+      : "AI generation failed";
+
+    let state: GenerationJobFailureState;
+    try {
+      state = await failJobChecked(jobId as string, message);
+    } catch (settlementError) {
+      console.error(`${opts.taskSlug} credit settlement needs reconciliation`, settlementError);
       return {
         ok: false,
-        error: `${msg} The credit refund could not be confirmed; this job needs admin reconciliation.`,
+        error: `${message} Credit/refund state could not be confirmed; this job needs admin reconciliation.`,
       };
     }
-    return { ok: false, error: `${msg} Your credits were refunded.` };
+
+    // A completion response can be lost after the database committed. Never tell
+    // users their result failed or refund their credits if completion is confirmed.
+    if (state === "already_complete" && persistenceFinished) {
+      return { ok: true, value: persistedValue as R };
+    }
+
+    console.error(`${opts.taskSlug} failed with job state ${state}`);
+    return failureResult<R>(message, state);
   }
 }
