@@ -123,3 +123,10 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - Scene drafting uses the shared checked AI-job runner; structured output and scene counts are validated before rows are persisted.
 - Inserted scene IDs are preassigned so only rows from the attempted draft are eligible for compensating cleanup when an insert response may have been lost.
 - Staging must still exercise gateway timeouts/schema errors, concurrent requests, persistence races and checked credit settlement against the real database.
+
+
+## Update — render finalization recovery (October 13, 2026)
+
+- Render status polling reconciles a failed/cancelled job to completed only when a ready export for that render job is confirmed in the database.
+- This covers the crash window where the export row persisted but the job's final status update was lost. Missing, non-ready, or unreadable exports do not silently turn into success.
+- Unit coverage includes terminal/nonterminal states, ready-export recovery, lost update response, and lookup/write failures. Real provider and concurrent database behavior still require staging validation.

@@ -60,6 +60,7 @@ For each scenario, record the job ID, result, asset row, scene reference, credit
 - [ ] Start a render and confirm the request returns a job ID without waiting synchronously for the render.
 - [ ] Check queued/processing/progress/success/failure states. Test renderer timeout, provider failure, missing output URL, download timeout, bad content type, oversized output, malformed MP4, and finalization retry/race.
 - [ ] Confirm an invalid render output is not marked ready. A valid render must have a stored export row and private media object with consistent metadata.
+- [ ] Simulate export-row persistence succeeding while the final render-job status write is lost (for example, terminate the worker after export persistence in a staging-only test). On the next status poll, confirm a `ready` export reconciles the job to `completed`, no duplicate export is inserted, and export/asset/storage paths remain consistent. Also confirm that no ready export leaves a failed/cancelled job terminal.
 - [ ] Download the MP4 from the application and play it in a separate player/browser. Confirm duration, audio, captions, and aspect ratio; do not sign off on container-box validation alone.
 
 ## E. Export, share, billing, and admin

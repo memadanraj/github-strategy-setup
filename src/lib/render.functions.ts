@@ -2,7 +2,7 @@ import {createServerFn} from "@tanstack/react-start";
 import {z} from "zod";
 import {requireSupabaseAuth} from "@/integrations/supabase/auth-middleware";
 import {getRenderProvider,type RenderManifest} from "./render.providers.server";
-import { claimRenderJobFinalization } from "./render-finalization";
+import { claimRenderJobFinalization, recoverTerminalRenderWithReadyExport } from "./render-finalization";
 import { cancelRenderJobWithProvider } from "./render-cancellation";
 import { downloadRemoteMedia } from "./remote-media.server";
 import { MAX_RENDER_EXPORT_BYTES, Mp4ValidationError, validateMp4Container } from "./mp4-validation";
@@ -92,7 +92,35 @@ export const getRenderJob = createServerFn({ method: "POST" })
 
     if (result.error || !result.data) return { ok: false, error: "Render job not found." };
     const job: any = result.data;
-    if (!job.provider_job_id || ["failed", "cancelled"].includes(job.status)) return { ok: true, job };
+    const terminalRenderStatus = job.status === "failed" || job.status === "cancelled";
+    if (terminalRenderStatus) {
+      const recovery = await recoverTerminalRenderWithReadyExport(job.status, {
+        findReadyExport: () => admin.from("exports")
+          .select("id,status")
+          .eq("render_job_id", job.id)
+          .maybeSingle(),
+        markCompleted: () => admin.from("render_jobs")
+          .update({
+            status: "completed",
+            progress: 100,
+            error: null,
+            finalization_started_at: null,
+            finished_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.id)
+          .in("status", ["failed", "cancelled"])
+          .select("*")
+          .maybeSingle(),
+        reloadJob: () => admin.from("render_jobs")
+          .select("*")
+          .eq("id", job.id)
+          .maybeSingle(),
+      });
+      if (recovery.kind === "error") return { ok: false, error: recovery.message };
+      if (recovery.kind === "recovered") return { ok: true, job: recovery.job };
+    }
+    if (!job.provider_job_id || terminalRenderStatus) return { ok: true, job };
 
     if (job.status === "completed") {
       const savedExport = await admin.from("exports").select("id").eq("render_job_id", job.id).maybeSingle();
