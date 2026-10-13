@@ -184,3 +184,10 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Cancellation webhook handling now checks the subscription update result and recalculates the user's effective plan from remaining active, trialing or past-due subscriptions before updating the profile.
 - A canceled subscription can no longer downgrade a user who still has another entitlement-bearing subscription. Database errors prevent a falsely successful acknowledgement.
 - Regression tests cover remaining-plan selection and missing/invalid candidate cases. Sandbox checkout, cancellation/renewal event ordering, refund behavior and staging schema/migration verification remain open.
+
+
+## Audio job settlement — October 13, 2026
+
+- Audio generation uses the checked job-settlement wrapper and validates completion RPC results rather than assuming a no-error response proves the job reached a successful terminal state.
+- Refund messaging is tied to the actual checked settlement outcome; unknown settlement produces reconciliation messaging and avoids claiming a refund without evidence.
+- Unit tests cover RPC failure and terminal-state settlement behavior. Real audio provider/storage failure injection and staging playback remain release gates.

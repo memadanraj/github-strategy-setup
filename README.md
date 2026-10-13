@@ -54,3 +54,8 @@ AI provider calls are not automatically exercised by unit tests. Run provider an
 - Use a separate staging database and media bucket for migrations and provider tests.
 - Rotate credentials if they were ever committed to Git history.
 - Keep production changes behind reviewed pull requests and passing CI checks.
+
+
+## Latest hardening update — audio completion confirmation
+
+Audio generation now verifies that the persisted generation job status is `complete` before reporting success. This closes the guarded-RPC no-op case where a job could already be failed or otherwise terminal even though the completion call returned without a database error. CI coverage does not replace staging tests with real providers and Supabase.

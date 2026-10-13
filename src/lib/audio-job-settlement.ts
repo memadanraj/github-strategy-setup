@@ -28,16 +28,43 @@ const failureStates: VisualJobFailureState[] = [
   "not_active",
 ];
 
+export type AudioJobStatusReader = (
+  jobId: string,
+) => PromiseLike<{
+  data: { status: string } | null;
+  error: { message: string } | null;
+}>;
+
 export async function completeAudioJob(
   rpc: AudioJobRpc,
   jobId: string,
   output: unknown,
+  readStatus: AudioJobStatusReader,
 ): Promise<void> {
   const { error } = await rpc("complete_generation_job", {
     _job_id: jobId,
     _output: output,
   });
   if (error) throw new Error("Could not finalize the audio generation job.");
+
+  // The legacy completion RPC returns void and can be a guarded no-op for an
+  // already-terminal job. Only report success after reading the committed state.
+  let state: Awaited<ReturnType<AudioJobStatusReader>>;
+  try {
+    state = await readStatus(jobId);
+  } catch {
+    throw new Error("Could not confirm audio generation job completion.");
+  }
+
+  if (state.error || !state.data) {
+    throw new Error("Could not confirm audio generation job completion.");
+  }
+  if (state.data.status !== "complete") {
+    if (state.data.status === "failed") {
+      throw new Error("Audio generation job was already marked failed; completion was not confirmed.");
+    }
+    throw new Error("Audio generation job is not confirmed complete.");
+  }
 }
 
 export async function failAudioJob(

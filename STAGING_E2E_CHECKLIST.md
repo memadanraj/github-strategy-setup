@@ -83,3 +83,10 @@ For each scenario, record the job ID, result, asset row, scene reference, credit
 ## Sign-off rule
 
 Mark every step `PASS`, `FAIL`, or `BLOCKED` with evidence. Do not call the app production-ready while any required core flow is blocked or failing. A local/CI pass is not a substitute for provider-backed generation, database/storage integration, real MP4 playback, cross-user authorization, and billing sandbox verification.
+
+
+### Audio completion state regression
+
+- [ ] Simulate `complete_generation_job` returning no error while the row is already `failed` (guarded no-op). Confirm the request does not report audio generation success and checked settlement/cleanup runs safely.
+- [ ] Confirm a successful completion is returned only after a status read verifies `generation_jobs.status = complete`.
+- [ ] Make the status read unavailable after a successful RPC response. Confirm the handler does not claim success; retry/checked settlement determines whether output should be preserved or cleaned up.

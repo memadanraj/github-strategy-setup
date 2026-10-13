@@ -27,8 +27,15 @@ async function failJob(id:string,msg:string,cleanup:AudioJobFailureCleanup={}){
  return failAudioJob((name,args)=>db.rpc(name,args),id,msg,cleanup);
 }
 async function doneJob(id:string,out:any){
- return completeAudioJob((name,args)=>db.rpc(name,args),id,out);
-}
+ return completeAudioJob(
+  (name,args)=>db.rpc(name,args),
+  id,
+  out,
+  async(jobId)=>{
+   const {data,error}=await db.from("generation_jobs").select("status").eq("id",jobId).maybeSingle();
+   return {data:data?{status:String(data.status)}:null,error};
+  }
+ );}
 
 export const generateSceneVoiceover=createServerFn({method:"POST"}).middleware([requireSupabaseAuth]).inputValidator(d=>z.object({projectId:z.string().uuid(),sceneId:z.string().uuid(),voiceId:z.string().uuid(),instructions:z.string().max(500).optional(),speed:z.number().min(.25).max(4).optional()}).parse(d)).handler(async({data,context})=>{
  const s:any=context.supabase;
