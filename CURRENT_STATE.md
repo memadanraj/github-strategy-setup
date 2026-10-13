@@ -130,3 +130,10 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - Render status polling reconciles a failed/cancelled job to completed only when a ready export for that render job is confirmed in the database.
 - This covers the crash window where the export row persisted but the job's final status update was lost. Missing, non-ready, or unreadable exports do not silently turn into success.
 - Unit coverage includes terminal/nonterminal states, ready-export recovery, lost update response, and lookup/write failures. Real provider and concurrent database behavior still require staging validation.
+
+
+## Update — Paddle cancellation entitlement reconciliation (October 13, 2026)
+
+- A subscription-canceled event now confirms the subscription row was actually marked canceled, then recomputes the account's effective plan from any remaining active, trialing, or past-due subscriptions.
+- The account falls back to free only when no qualifying subscription remains; a database lookup or profile update error is surfaced instead of silently claiming reconciliation succeeded.
+- Regression tests cover multiple subscriptions, pending payment recovery, cancelled/paused rows and missing qualifying subscriptions. Paddle sandbox lifecycle/order and legacy billing migration reconciliation remain staging gates.

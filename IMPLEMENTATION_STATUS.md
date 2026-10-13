@@ -177,3 +177,10 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Added a checked recovery helper so a ready export persisted before a lost job-status update is reconciled back to completed when a terminal render job is polled.
 - The path does not infer completion from status alone: it checks the export row is ready and ties it to the same render job; missing/non-ready export and DB read/write failures remain explicit errors.
 - Regression tests cover failed/cancelled rows with ready exports, no/missing export, non-ready export, lost status-update response, and database lookup/write failures. SQL/RLS races and provider-backed render/playback remain staging gates.
+
+
+## Paddle cancellation plan reconciliation — October 13, 2026
+
+- Cancellation webhook handling now checks the subscription update result and recalculates the user's effective plan from remaining active, trialing or past-due subscriptions before updating the profile.
+- A canceled subscription can no longer downgrade a user who still has another entitlement-bearing subscription. Database errors prevent a falsely successful acknowledgement.
+- Regression tests cover remaining-plan selection and missing/invalid candidate cases. Sandbox checkout, cancellation/renewal event ordering, refund behavior and staging schema/migration verification remain open.

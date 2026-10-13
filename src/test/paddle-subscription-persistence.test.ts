@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   persistPaddleSubscriptionCancellation,
   persistPaddleSubscriptionPlanChange,
+  resolveEffectivePlanAfterCancellation,
 } from "@/lib/paddle-subscription-persistence";
 
 describe("Paddle subscription persistence", () => {
@@ -63,5 +64,36 @@ describe("Paddle subscription persistence", () => {
     await expect(persistPaddleSubscriptionCancellation({
       updateSubscription: vi.fn(async () => ({ data: null, error: { message: "no row" } })),
     })).resolves.toMatchObject({ ok: false });
+  });
+});
+
+describe("effective plan after subscription cancellation", () => {
+  it("keeps the newest remaining active or trialing plan instead of downgrading to free", () => {
+    expect(resolveEffectivePlanAfterCancellation([
+      { plan_slug: "creator", status: "active", updated_at: "2026-01-01T00:00:00.000Z" },
+      { plan_slug: "pro", status: "trialing", updated_at: "2026-02-01T00:00:00.000Z" },
+    ])).toBe("pro");
+  });
+
+  it("preserves a past-due plan during the existing payment-recovery grace period", () => {
+    expect(resolveEffectivePlanAfterCancellation([
+      { plan_slug: "creator", status: "past_due", updated_at: "2026-03-01T00:00:00.000Z" },
+      { plan_slug: "pro", status: "canceled", updated_at: "2026-04-01T00:00:00.000Z" },
+    ])).toBe("creator");
+  });
+
+  it("ignores cancelled/paused subscriptions and falls back to free when none remain", () => {
+    expect(resolveEffectivePlanAfterCancellation([
+      { plan_slug: "creator", status: "canceled", updated_at: "2026-04-01T00:00:00.000Z" },
+      { plan_slug: "pro", status: "paused", updated_at: "2026-05-01T00:00:00.000Z" },
+    ])).toBe("free");
+    expect(resolveEffectivePlanAfterCancellation([])).toBe("free");
+  });
+
+  it("handles invalid timestamps without losing a valid entitlement", () => {
+    expect(resolveEffectivePlanAfterCancellation([
+      { plan_slug: "creator", status: "active", updated_at: "invalid" },
+      { plan_slug: "pro", status: "canceled", updated_at: "2026-05-01T00:00:00.000Z" },
+    ])).toBe("creator");
   });
 });
