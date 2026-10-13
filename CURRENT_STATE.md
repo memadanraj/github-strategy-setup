@@ -144,3 +144,10 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - The audio generation flow checks completion RPC errors and follows with a persisted generation-job state confirmation before reporting success.
 - Failure handling uses the checked settlement path so failed, already-complete, no-reservation and uncertain outcomes do not trigger misleading refund claims or unsafe output cleanup.
 - Staging must still exercise voiceover, preview, cloning, music, storage failures, lost completion responses and live provider behavior.
+
+
+## Update — shared audio and visual completion confirmation (October 13, 2026)
+
+- Audio, image, and clip jobs now share a completion helper that reads the persisted generation-job state after the legacy completion RPC. Only a persisted completed state is reported as success.
+- A guarded no-op on a failed terminal job, missing/unreadable status, or a nonterminal state follows the checked failure-settlement path instead of reporting success.
+- Staging still must exercise real provider results, storage failures, settlement concurrency and actual playback.
