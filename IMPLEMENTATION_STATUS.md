@@ -170,3 +170,10 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Scene drafting is integrated with the shared AI task settlement path instead of issuing unchecked complete/fail RPC calls.
 - Structured output and scene counts are validated; inserted scene IDs are known before writes so cleanup can be scoped to this draft without deleting unrelated rows after an uncertain insert response.
 - Existing completion state is checked before reporting success. Staging SQL/RLS, concurrency and provider failure injection remain release gates.
+
+
+## Render finalization recovery — October 13, 2026
+
+- Added a checked recovery helper so a ready export persisted before a lost job-status update is reconciled back to completed when a terminal render job is polled.
+- The path does not infer completion from status alone: it checks the export row is ready and ties it to the same render job; missing/non-ready export and DB read/write failures remain explicit errors.
+- Regression tests cover failed/cancelled rows with ready exports, no/missing export, non-ready export, lost status-update response, and database lookup/write failures. SQL/RLS races and provider-backed render/playback remain staging gates.
