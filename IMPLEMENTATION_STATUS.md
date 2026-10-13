@@ -191,3 +191,10 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Audio generation uses the checked job-settlement wrapper and validates completion RPC results rather than assuming a no-error response proves the job reached a successful terminal state.
 - Refund messaging is tied to the actual checked settlement outcome; unknown settlement produces reconciliation messaging and avoids claiming a refund without evidence.
 - Unit tests cover RPC failure and terminal-state settlement behavior. Real audio provider/storage failure injection and staging playback remain release gates.
+
+
+## Shared audio and visual completion confirmation — October 13, 2026
+
+- Added one shared checked-completion helper and wired it into audio, image and clip persistence. It requires a database read confirming generation_jobs.status = complete after the void completion RPC.
+- Failed, nonterminal, missing, or unreadable terminal-state results become errors handled by the existing checked failure settlement/compensation logic; media is not cleaned up when the settled state is uncertain.
+- Unit coverage exercises success, guarded no-op on failed jobs, unreadable/missing status, and RPC failures. Real provider/storage fault injection remains staging-only.
