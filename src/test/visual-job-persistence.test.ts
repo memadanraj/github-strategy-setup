@@ -212,4 +212,12 @@ describe("generated visual persistence", () => {
       expect(result.error).not.toContain("Your credits were refunded.");
     }
   });
+  
+  it("does not infer a refund from the already-failed terminal state alone", async () => {
+    const failJob = vi.fn(async (): Promise<VisualJobFailureState> => "already_failed");
+    const outcome = await settleVisualJobFailure(failJob, "provider failure");
+    expect(outcome.error).toContain("could not confirm its refund status");
+    expect(outcome.error).not.toContain("Your credits were refunded.");
+  });
+
 });

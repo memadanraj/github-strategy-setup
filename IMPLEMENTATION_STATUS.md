@@ -163,3 +163,10 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Integrated generated-clip MP4 structural validation and authenticated provider-content fallback on top of the latest main timeline settings/edit-form contracts.
 - Reconciled Phase 9 timeline undo/redo with the Phase 5 explicit-save flow: clip save callbacks keep their Promise<boolean> result contract, and undo/redo history changes only after a confirmed persisted write.
 - Added the 100-step bounded history module and unit tests alongside clip MP4 MIME/box-structure checks. Real provider results, codec/playback, staging DB/RLS, and migration verification remain untested from CI.
+
+
+## Scene drafting checked settlement — October 13, 2026
+
+- Scene drafting is integrated with the shared AI task settlement path instead of issuing unchecked complete/fail RPC calls.
+- Structured output and scene counts are validated; inserted scene IDs are known before writes so cleanup can be scoped to this draft without deleting unrelated rows after an uncertain insert response.
+- Existing completion state is checked before reporting success. Staging SQL/RLS, concurrency and provider failure injection remain release gates.

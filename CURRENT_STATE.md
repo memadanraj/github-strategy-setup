@@ -116,3 +116,10 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - Generated scene clips now use an MP4-compatible MIME + ISO BMFF structural validation path with a 128 MiB cap before storage/asset/scene/job completion. A stale or inaccessible provider output URL falls back to the authenticated provider-content endpoint.
 - Timeline clip editing includes bounded in-memory undo/redo history for successfully persisted clip edits, limited to 100 steps. A failed save does not commit a history entry.
 - The clip checks validate container structure, not codec decoding or real playback. Provider-backed download, asset linking, media playback, and the staging database migration/RLS checks remain release gates.
+
+
+## Update — scene drafting settlement (October 13, 2026)
+
+- Scene drafting uses the shared checked AI-job runner; structured output and scene counts are validated before rows are persisted.
+- Inserted scene IDs are preassigned so only rows from the attempted draft are eligible for compensating cleanup when an insert response may have been lost.
+- Staging must still exercise gateway timeouts/schema errors, concurrent requests, persistence races and checked credit settlement against the real database.

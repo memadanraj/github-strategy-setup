@@ -44,57 +44,71 @@ export const draftScenesWithAi = createServerFn({ method: "POST" })
     const idea = (project.idea || project.title || "").trim();
     if (!idea) return { ok: false as const, error: "Add a video idea to the project first." };
 
-    const { data: task } = await supabase.from("ai_tasks").select("model").eq("slug", "draft_scenes").maybeSingle();
+    const { runAiTask } = await import("./ai-jobs.server");
+    const short = project.format === "short";
+    const result = await runAiTask<DraftScenes, { count: number; sceneIds: string[] }>({
+      supabase,
+      taskSlug: "draft_scenes",
+      projectId: project.id,
+      input: { idea, sceneCount: data.sceneCount },
+      schemaName: "scene_outline",
+      schema: sceneSchema,
+      instructions:
+        "You are a YouTube video producer. Break the idea into a high-retention scene outline. Scene 1 is a strong hook. Narration is the spoken voiceover for that scene. visual_prompt is a concise, concrete description of what is on screen. Keep durations realistic.",
+      prompt: `Video idea: ${idea}\\nFormat: ${short ? "YouTube Short (vertical, under 60 seconds total)" : "Long-form YouTube video"}\\nNumber of scenes: ${data.sceneCount}`,
+      persist: async (draft) => {
+        const safeDrafts = z.array(z.object({
+          title: z.string(),
+          narration: z.string(),
+          visual_prompt: z.string(),
+          duration_seconds: z.number().finite(),
+        })).parse(draft.scenes.slice(0, data.sceneCount));
+        if (safeDrafts.length === 0) throw new Error("AI returned no usable scenes.");
 
-    // Reserve credits + open job
-    const { data: jobId, error: je } = await supabase.rpc("start_generation_job", {
-      _task_slug: "draft_scenes",
-      _project_id: project.id,
-      _input: { idea, sceneCount: data.sceneCount },
+        const { count, error: countError } = await supabase
+          .from("scenes")
+          .select("id", { count: "exact", head: true })
+          .eq("project_id", project.id);
+        if (countError) throw new Error("Couldn't load existing scene order.");
+
+        const start = count ?? 0;
+        const rows = safeDrafts.map((scene, index) => ({
+          id: crypto.randomUUID(),
+          project_id: project.id,
+          position: start + index,
+          title: scene.title.slice(0, 120) || `Scene ${start + index + 1}`,
+          narration: scene.narration,
+          visual_prompt: scene.visual_prompt,
+          duration_seconds: Math.max(1, Math.min(120, Math.round(scene.duration_seconds))),
+        }));
+        const sceneIds = rows.map((row) => row.id);
+        const { error: insertError } = await supabase.from("scenes").insert(rows);
+        if (insertError) {
+          // The insert request may have committed even if its response was lost.
+          // IDs are generated here so a safe, project-scoped cleanup can reconcile it.
+          const { error: cleanupError } = await supabase
+            .from("scenes")
+            .delete()
+            .eq("project_id", project.id)
+            .in("id", sceneIds);
+          if (cleanupError) {
+            throw new Error("Scene save failed and cleanup could not be confirmed; manual reconciliation is required.");
+          }
+          throw new Error("Couldn't save scenes.");
+        }
+        return { count: rows.length, sceneIds };
+      },
+      rollback: async (persisted) => {
+        if (persisted.sceneIds.length === 0) return;
+        const { error: cleanupError } = await supabase
+          .from("scenes")
+          .delete()
+          .eq("project_id", project.id)
+          .in("id", persisted.sceneIds);
+        if (cleanupError) throw new Error("Could not remove scenes after confirmed job failure.");
+      },
     });
-    if (je || !jobId) {
-      const msg = je?.message?.includes("INSUFFICIENT_CREDITS") ? "Not enough credits." : "Couldn't start the AI job.";
-      return { ok: false as const, error: msg };
-    }
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    try {
-      const apiKey = process.env["LOVABLE_API_KEY"];
-      if (!apiKey) throw new Error("AI is not configured");
-      const { generateStructured } = await import("./ai-gateway.server");
-      const short = project.format === "short";
-      const result = await generateStructured<DraftScenes>({
-        apiKey,
-        model: task?.model ?? "openai/gpt-6-astra",
-        schemaName: "scene_outline",
-        schema: sceneSchema,
-        instructions:
-          "You are a YouTube video producer. Break the idea into a high-retention scene outline. Scene 1 is a strong hook. Narration is the spoken voiceover for that scene. visual_prompt is a concise, concrete description of what is on screen. Keep durations realistic.",
-        input: `Video idea: ${idea}\nFormat: ${short ? "YouTube Short (vertical, under 60 seconds total)" : "Long-form YouTube video"}\nNumber of scenes: ${data.sceneCount}`,
-      });
-
-      const { count } = await supabase
-        .from("scenes")
-        .select("id", { count: "exact", head: true })
-        .eq("project_id", project.id);
-      const start = count ?? 0;
-      const rows = result.scenes.slice(0, data.sceneCount).map((s, i) => ({
-        project_id: project.id,
-        position: start + i,
-        title: s.title.slice(0, 120) || `Scene ${start + i + 1}`,
-        narration: s.narration,
-        visual_prompt: s.visual_prompt,
-        duration_seconds: Math.max(1, Math.min(120, Math.round(s.duration_seconds))),
-      }));
-      const { error: ie } = await supabase.from("scenes").insert(rows);
-      if (ie) throw new Error("Couldn't save scenes");
-
-      await supabaseAdmin.rpc("complete_generation_job", { _job_id: jobId, _output: { scenes: rows.length } });
-      return { ok: true as const, count: rows.length };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "AI generation failed";
-      console.error("draft_scenes failed", e);
-      await supabaseAdmin.rpc("fail_generation_job", { _job_id: jobId, _error: msg });
-      return { ok: false as const, error: `${msg} Your credits were refunded.` };
-    }
+    if (!result.ok) return result;
+    return { ok: true as const, count: result.value.count };
   });
