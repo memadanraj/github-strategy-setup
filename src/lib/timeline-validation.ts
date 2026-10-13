@@ -75,7 +75,7 @@ export function validateTimelineCaptionPatch(
   current: TimelineCaptionTiming,
 ): string | null {
   if (!isRecord(patch) || Object.keys(patch).length === 0) return "No caption changes were provided.";
-  if (unknownKeys(patch, ["text", "start_seconds", "end_seconds", "position"])) {
+  if (unknownKeys(patch, ["text", "start_seconds", "end_seconds", "position", "style"])) {
     return "This caption change is not supported.";
   }
 
@@ -85,6 +85,7 @@ export function validateTimelineCaptionPatch(
   if ("position" in patch && !["top", "center", "bottom"].includes(String(patch["position"]))) {
     return "Caption position is invalid.";
   }
+  if ("style" in patch && !isRecord(patch["style"])) return "Caption style is invalid.";
 
   const start = "start_seconds" in patch ? numericField(patch, "start_seconds") : current.start_seconds;
   const end = "end_seconds" in patch ? numericField(patch, "end_seconds") : current.end_seconds;
