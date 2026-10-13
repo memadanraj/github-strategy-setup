@@ -205,3 +205,10 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Added a fail-closed ownership check before service-role export access, publication creation, token refresh or calls to the YouTube API.
 - The ownership lookup uses the request-scoped authenticated client and filters by both project ID and the signed-in user's ID.
 - Unit tests cover allowed, missing, mismatched, failed and thrown lookup cases. No database migration was needed; two-user staging verification remains a release gate.
+
+
+## YouTube publication partial-success reconciliation — October 13, 2026
+
+- Tracks upload attempt and confirmed video ID; the normal final publication update now verifies the expected row was returned.
+- Confirmed remote success plus a later error attempts a checked local recovery to preserve published state, URL and provider ID. Ambiguous upload outcome is kept in uploading/reconciliation state instead of marked failed automatically.
+- The UI distinguishes published-with-warning from full success. Unit coverage passed in CI; a real YouTube channel test is still required.

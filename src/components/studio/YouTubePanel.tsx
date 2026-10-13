@@ -50,7 +50,11 @@ export function YouTubePanel({ project }: { project: any }) {
         tags: tags.split(",").map(x => x.trim()).filter(Boolean), privacyStatus: privacy,
         thumbnailAssetId: thumbnailAssetId || undefined,
       }});
-      if (r.ok) { toast.success("Published to YouTube"); refetchPublications(); }
+      if (r.ok) {
+        if ("warning" in r && r.warning) toast.warning(r.warning);
+        else toast.success("Published to YouTube");
+        refetchPublications();
+      }
     } catch (e: any) { toast.error(e.message); } finally { setBusy(false); }
   }
   async function refreshAnalytics(videoId: string) {
