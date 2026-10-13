@@ -1,5 +1,6 @@
 import '@tanstack/react-start/server-only';
 import { addCredits, admin, paddleEnv } from "./paddle.server";
+import { resolveEffectivePlanAfterCancellation } from "./paddle-subscription-persistence";
 import { verifyPaddleSignature } from "./paddle-security";
 import {
   calculatePackCredits,
@@ -421,13 +422,30 @@ async function processPaddleEvent(db: any, event: any) {
         status: "canceled",
         canceled_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      }).eq("paddle_subscription_id", data.id);
-      if (update.error) throw new Error("Couldn't update the cancelled subscription.");
+      }).eq("paddle_subscription_id", data.id).select("paddle_subscription_id").maybeSingle();
+      if (update.error || !update.data) {
+        throw new Error("Couldn't confirm the cancelled subscription state.");
+      }
+
+      // Do not downgrade an account if another subscription still grants access.
+      // `past_due` stays eligible because this codebase retains the plan while payment recovery is pending.
+      const remainingSubscriptions = await db.from("paddle_subscriptions")
+        .select("plan_slug,status,updated_at")
+        .eq("user_id", rowResult.data.user_id)
+        .in("status", ["active", "trialing", "past_due"])
+        .order("updated_at", { ascending: false })
+        .limit(100);
+      if (remainingSubscriptions.error) {
+        throw new Error("Couldn't reconcile the account plan after cancellation.");
+      }
+      const effectivePlan = resolveEffectivePlanAfterCancellation(remainingSubscriptions.data ?? []);
       const profile = await db.from("profiles").update({
-        plan_slug: "free",
+        plan_slug: effectivePlan,
         updated_at: new Date().toISOString(),
-      }).eq("id", rowResult.data.user_id);
-      if (profile.error) throw new Error("Couldn't update the cancelled account plan.");
+      }).eq("id", rowResult.data.user_id).select("id").maybeSingle();
+      if (profile.error || !profile.data) {
+        throw new Error("Couldn't update the cancelled account plan.");
+      }
     }
     return;
   }

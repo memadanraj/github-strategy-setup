@@ -77,3 +77,38 @@ export async function persistPaddleSubscriptionCancellation(options: {
     };
   }
 }
+
+/**
+ * Select the newest subscription that still grants the account its existing
+ * paid-plan entitlement after one subscription is cancelled.
+ *
+ * `past_due` remains eligible to match the webhook's current grace-period
+ * behavior; canceled/paused/other terminal states are not entitled.
+ */
+export type PaddleSubscriptionPlanCandidate = {
+  plan_slug: string | null;
+  status: string | null;
+  updated_at: string | null;
+};
+
+export function resolveEffectivePlanAfterCancellation(
+  subscriptions: readonly PaddleSubscriptionPlanCandidate[],
+): string {
+  const eligibleStatuses = new Set(["active", "trialing", "past_due"]);
+  const candidates = subscriptions.filter((subscription) =>
+    typeof subscription.plan_slug === "string" &&
+    subscription.plan_slug.trim().length > 0 &&
+    typeof subscription.status === "string" &&
+    eligibleStatuses.has(subscription.status.toLowerCase()),
+  );
+
+  candidates.sort((left, right) => {
+    const leftTime = Date.parse(left.updated_at ?? "");
+    const rightTime = Date.parse(right.updated_at ?? "");
+    const normalizedLeft = Number.isFinite(leftTime) ? leftTime : 0;
+    const normalizedRight = Number.isFinite(rightTime) ? rightTime : 0;
+    return normalizedRight - normalizedLeft;
+  });
+
+  return candidates[0]?.plan_slug?.trim() || "free";
+}
