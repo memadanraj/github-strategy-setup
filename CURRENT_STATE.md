@@ -137,3 +137,10 @@ Do not call the app production-ready until a staging user can sign in, create/ed
 - A subscription-canceled event now confirms the subscription row was actually marked canceled, then recomputes the account's effective plan from any remaining active, trialing, or past-due subscriptions.
 - The account falls back to free only when no qualifying subscription remains; a database lookup or profile update error is surfaced instead of silently claiming reconciliation succeeded.
 - Regression tests cover multiple subscriptions, pending payment recovery, cancelled/paused rows and missing qualifying subscriptions. Paddle sandbox lifecycle/order and legacy billing migration reconciliation remain staging gates.
+
+
+## Update — audio job settlement (October 13, 2026)
+
+- The audio generation flow checks completion RPC errors and follows with a persisted generation-job state confirmation before reporting success.
+- Failure handling uses the checked settlement path so failed, already-complete, no-reservation and uncertain outcomes do not trigger misleading refund claims or unsafe output cleanup.
+- Staging must still exercise voiceover, preview, cloning, music, storage failures, lost completion responses and live provider behavior.
