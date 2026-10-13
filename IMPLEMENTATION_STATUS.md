@@ -185,3 +185,6 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - The helper checks the persisted `generation_jobs.status` and accepts only `complete`; failed, nonterminal, missing, or unreadable states become errors handled by the existing checked failure-settlement/compensation path.
 - New unit coverage verifies the state-confirmation contract, including a successful RPC that is a no-op because the job was already failed. No schema migration is needed.
 - Staging verification remains required for generated images, provider-backed clips, storage fault injection, and real clip playback/decoding.
+
+
+- Verification evidence: [CI run 38405640071](https://github.com/memadanraj/github-strategy-setup/actions/runs/38405640071) passed lint, type-check, **31 test files / 258 tests**, and production build for code commit `be9c9c8c7d45778d4607c178e7ed1a6762189fbb`. Warning-level lint and empty-link findings remain but did not fail CI. Staging provider/storage/MP4 playback acceptance is still blocked pending real credentials and an isolated environment.
