@@ -500,7 +500,7 @@ export const checkSceneClip = createServerFn({ method: "POST" })
       .eq("id", data.jobId).eq("task_slug", "generate_clip").maybeSingle();
     if (!job) return { status: "failed" as const, error: "Job not found" };
     if (job.status === "complete") return { status: "complete" as const };
-    if (job.status === "failed") return { status: "failed" as const, error: `${job.error ?? "Clip failed."} Your credits were refunded.` };
+    if (job.status === "failed") return { status: "failed" as const, error: job.error ?? "Clip failed. Check your credit history for the final settlement status." };
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const fail = async (msg: string) => {

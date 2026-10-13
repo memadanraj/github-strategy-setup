@@ -16,14 +16,36 @@ vi.mock("@/lib/ai-gateway.server", () => ({
   generateStructured: mocks.generateStructured,
 }));
 
-function makeSupabase(task: { model: string } | null = { model: "test-model" }, taskError: unknown = null) {
+function makeSupabase(
+  task: { model: string } | null = { model: "test-model" },
+  taskError: unknown = null,
+  jobStatus: string | null = "complete",
+  jobStateError: unknown = null,
+) {
   return {
-    from: mocks.from.mockReturnValue({
-      select: () => ({
-        eq: () => ({
-          maybeSingle: async () => ({ data: task, error: taskError }),
-        }),
-      }),
+    from: mocks.from.mockImplementation((table: string) => {
+      if (table === "ai_tasks") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: task, error: taskError }),
+            }),
+          }),
+        };
+      }
+      if (table === "generation_jobs") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: jobStatus ? { status: jobStatus } : null,
+                error: jobStateError,
+              }),
+            }),
+          }),
+        };
+      }
+      throw new Error(`Unexpected table in test mock: ${table}`);
     }),
     rpc: mocks.userRpc,
   };
@@ -131,4 +153,78 @@ describe("runAiTask credit settlement", () => {
       expect(result.error).not.toContain("Your credits were refunded.");
     }
   });
+  
+  it("does not claim a refund when a job was already failed but refund status is not confirmed", async () => {
+    mocks.generateStructured.mockRejectedValueOnce(new Error("provider timeout"));
+    mocks.adminRpc.mockResolvedValueOnce({ data: "already_failed", error: null });
+    const result = await runAiTask(options(makeSupabase()));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("could not confirm its refund status");
+      expect(result.error).not.toContain("Your credits were refunded.");
+    }
+  });
+
+  it("rolls back persisted output after the database confirms settlement failure", async () => {
+    mocks.adminRpc
+      .mockResolvedValueOnce({ data: null, error: new Error("completion unavailable") })
+      .mockResolvedValueOnce({ data: null, error: new Error("completion unavailable") })
+      .mockResolvedValueOnce({ data: "failed_refunded", error: null });
+    const rollback = vi.fn(async (_value: { ids: string[] }) => undefined);
+    const persist = vi.fn(async () => ({ ids: ["scene-1", "scene-2"] }));
+    const result = await runAiTask({
+      ...options(makeSupabase(), persist),
+      rollback,
+    });
+    expect(result.ok).toBe(false);
+    expect(rollback).toHaveBeenCalledWith({ ids: ["scene-1", "scene-2"] });
+    if (!result.ok) expect(result.error).toContain("Your credits were refunded.");
+  });
+
+  it("surfaces rollback failure after confirmed job failure", async () => {
+    mocks.adminRpc
+      .mockResolvedValueOnce({ data: null, error: new Error("completion unavailable") })
+      .mockResolvedValueOnce({ data: null, error: new Error("completion unavailable") })
+      .mockResolvedValueOnce({ data: "failed_refunded", error: null });
+    const rollback = vi.fn(async () => { throw new Error("delete failed"); });
+    const result = await runAiTask({
+      ...options(makeSupabase(), vi.fn().mockResolvedValue({ ids: ["scene-1"] })),
+      rollback,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("manual reconciliation is required");
+  });
+
+  
+  it("does not report success when the completion RPC no-ops on an already-failed job", async () => {
+    mocks.adminRpc
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: "already_failed", error: null });
+    const result = await runAiTask(options(makeSupabase({ model: "test-model" }, null, "failed")));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("could not confirm its refund status");
+      expect(result.error).not.toContain("Your credits were refunded.");
+    }
+    expect(mocks.adminRpc).toHaveBeenNthCalledWith(2, "fail_generation_job_checked", {
+      _job_id: "job-1",
+      _error: "AI output may have been saved, but the database did not confirm the job as complete.",
+    });
+  });
+
+  it("reconciles a failed status read against the checked terminal state before returning", async () => {
+    mocks.adminRpc
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: "already_complete", error: null });
+    const result = await runAiTask(options(
+      makeSupabase({ model: "test-model" }, null, null, new Error("read timeout")),
+    ));
+    expect(result).toEqual({ ok: true, value: "saved" });
+    expect(mocks.adminRpc).toHaveBeenNthCalledWith(2, "fail_generation_job_checked", {
+      _job_id: "job-1",
+      _error: "AI output may have been saved, but the database did not confirm the job as complete.",
+    });
+  });
+
 });
