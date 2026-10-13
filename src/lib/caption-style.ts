@@ -45,7 +45,7 @@ const hex = (v: unknown, d: string) => (typeof v === "string" && /^#[0-9a-f]{6}$
 const POSITION_Y: Record<string, number> = { top: 12, center: 50, bottom: 85 };
 
 export function normalizeCaptionStyle(raw: unknown, position?: string): CaptionStyle {
-  const s = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  const s = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as any;
   const d = DEFAULT_CAPTION_STYLE;
   return {
     font: typeof s.font === "string" && (CAPTION_FONTS as readonly string[]).includes(s.font) ? s.font : d.font,
