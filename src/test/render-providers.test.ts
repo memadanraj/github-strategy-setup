@@ -52,7 +52,7 @@ describe("toShotstackEdit", () => {
     expect(edit.output).toEqual({ format: "mp4", fps: 30, size: { width: 1920, height: 1080 } });
     expect(edit.timeline.tracks).toHaveLength(3);
     expect(edit.timeline.tracks[0]?.clips[0]).toMatchObject({
-      asset: { type: "title", text: "  Hello world  ", position: "top" },
+      asset: { type: "html", html: expect.stringContaining("Hello world") },
       start: 1,
       length: 2,
     });

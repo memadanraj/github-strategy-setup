@@ -79,3 +79,8 @@ After YouTube returns a confirmed video ID, a later thumbnail or local database 
 ## Latest hardening update — bounded Paddle webhooks
 
 The public Paddle webhook enforces a 1 MiB maximum raw request body while streaming the request, before signature verification, JSON parsing, or database access. The implementation treats `Content-Length` as an early-rejection hint and still counts actual streamed bytes.
+
+
+## Sharing hardening
+
+Share-link management explicitly confirms project ownership through the authenticated request-scoped client before using the service-role client. Password success is not accepted until resetting the failed-attempt lockout state is confirmed in the database.
