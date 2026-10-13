@@ -156,3 +156,10 @@ Added `src/test/paddle-credit-ledger.test.ts` to verify that credit grants use t
 - Structurally invalid output is treated as a permanent render failure, with the job failure state saved and its finalization claim cleared. If saving that state fails, the job remains in a reconciliation-safe state rather than being reported as completed.
 - GitHub Actions for code commit `611893c00bc9826d24d31581e58552a592d8d664` passed lint, TypeScript typecheck, **29 test files**, and production build.
 - The validator checks container structure only. It does not prove codec compatibility, all media samples decode, or that an actual hosted export plays correctly. Those acceptance checks remain a staging gate.
+
+
+## Clip integrity and timeline edit history — October 13, 2026
+
+- Integrated generated-clip MP4 structural validation and authenticated provider-content fallback on top of the latest main timeline settings/edit-form contracts.
+- Reconciled Phase 9 timeline undo/redo with the Phase 5 explicit-save flow: clip save callbacks keep their Promise<boolean> result contract, and undo/redo history changes only after a confirmed persisted write.
+- Added the 100-step bounded history module and unit tests alongside clip MP4 MIME/box-structure checks. Real provider results, codec/playback, staging DB/RLS, and migration verification remain untested from CI.

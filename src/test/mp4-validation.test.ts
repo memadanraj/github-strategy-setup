@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_GENERATED_CLIP_BYTES,
   MAX_RENDER_EXPORT_BYTES,
   Mp4ValidationError,
+  validateGeneratedClip,
   validateMp4Container,
 } from "@/lib/mp4-validation";
 
@@ -69,5 +71,23 @@ describe("rendered MP4 container validation", () => {
     ];
     const rest = validMp4().slice(20);
     expect(() => validateMp4Container(new Uint8Array([...ftypExtended, ...rest]), "video/mp4")).not.toThrow();
+  });
+});
+
+describe("generated scene-clip validation", () => {
+  it("accepts only structurally valid MP4 data before clip persistence", () => {
+    expect(() => validateGeneratedClip(validMp4(), "video/mp4")).not.toThrow();
+    expect(() => validateGeneratedClip(new TextEncoder().encode("<html>provider error</html>"), "video/mp4"))
+      .toThrow(Mp4ValidationError);
+  });
+
+  it("rejects non-MP4 video content types instead of relabeling them as MP4", () => {
+    expect(() => validateGeneratedClip(validMp4(), "video/webm"))
+      .toThrow("MP4-compatible content type");
+  });
+
+  it("applies the smaller scene-clip download budget", () => {
+    expect(MAX_GENERATED_CLIP_BYTES).toBe(128 * 1024 * 1024);
+    expect(() => validateGeneratedClip(validMp4(), "video/mp4", 32)).toThrow("size limit");
   });
 });
