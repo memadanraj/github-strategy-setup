@@ -231,8 +231,8 @@ export function TimelinePanel({ project }: { project: Project }) {
   async function applyStyleToAll(style: CaptionStyle) {
     const { x: _x, ...rest } = style;
     const rows = captions.map((c: any) => ({ id: c.id, style: { ...normalizeCaptionStyle(c.style, c.position), ...rest, x: style.x }, position: positionBucket(style.y) }));
-    qc.setQueryData(["captions", project.id], (all: any[] = []) => all.map((c) => ({ ...c, ...rows.find((r) => r.id === c.id) })));
-    const results = await Promise.all(rows.map((r) => db.from("captions").update({ style: r.style, position: r.position }).eq("project_id", project.id).eq("id", r.id)));
+    qc.setQueryData(["captions", project.id], (all: any[] = []) => all.map((c) => ({ ...c, ...rows.find((r: any) => r.id === c.id) })));
+    const results = await Promise.all(rows.map((r: any) => db.from("captions").update({ style: r.style, position: r.position }).eq("project_id", project.id).eq("id", r.id)));
     if (results.some((r: any) => r.error)) toast.error("Some captions could not be updated.");
     else toast.success(`Style applied to ${rows.length} captions.`);
   }
@@ -287,7 +287,7 @@ export function TimelinePanel({ project }: { project: Project }) {
         <div className="ml-auto flex items-center gap-2">
           <Button size="sm" variant={snap ? "panel" : "ghost"} onClick={() => setSnap((s) => !s)} aria-pressed={snap} title="Snap to grid"><Magnet /> Snap</Button>
           <ZoomOut className="size-4 text-muted-foreground" />
-          <Slider className="w-28" min={0.25} max={4} step={0.25} value={[zoom]} onValueChange={([v]) => setZoom(v)} aria-label="Zoom" />
+          <Slider className="w-28" min={0.25} max={4} step={0.25} value={[zoom]} onValueChange={([v]) => setZoom(v ?? 1)} aria-label="Zoom" />
           <ZoomIn className="size-4 text-muted-foreground" />
         </div>
       </div>
@@ -313,7 +313,7 @@ export function TimelinePanel({ project }: { project: Project }) {
             <Button size="icon" variant="ghost" onClick={() => { setPlaying(false); setTime(duration); }} aria-label="Go to end"><SkipForward /></Button>
             <span className="font-mono text-sm tabular-nums">{formatTime(time)}</span>
             <span className="font-mono text-xs text-muted-foreground">/ {formatTime(duration)}</span>
-            <Slider className="mx-2 flex-1" min={0} max={duration} step={0.01} value={[time]} onValueChange={([v]) => { setPlaying(false); setTime(v); }} aria-label="Seek" />
+            <Slider className="mx-2 flex-1" min={0} max={duration} step={0.01} value={[time]} onValueChange={([v]) => { setPlaying(false); setTime(v ?? 0); }} aria-label="Seek" />
             <span className="hidden truncate text-xs text-muted-foreground sm:block">{currentScene?.title}</span>
           </div>
         </div>
@@ -366,7 +366,7 @@ function Stage({ vertical, scene, visual, time, captions, selectedId, onSelect, 
   const [h, setH] = useState(360);
   useEffect(() => {
     if (!ref.current) return;
-    const ro = new ResizeObserver(([e]) => setH(e.contentRect.height));
+    const ro = new ResizeObserver(([e]) => e && setH(e.contentRect.height));
     ro.observe(ref.current);
     return () => ro.disconnect();
   }, []);
@@ -588,7 +588,7 @@ function CaptionInspector({ caption, onChange, onDelete, onApplyAll, onSeek }: {
         </select>
       </Field>
 
-      <Field label={`Size · ${s.size}px`}><Slider min={12} max={200} step={1} value={[s.size]} onValueChange={([v]) => set({ size: v })} /></Field>
+      <Field label={`Size · ${s.size}px`}><Slider min={12} max={200} step={1} value={[s.size]} onValueChange={([v]) => v !== undefined && set({ size: v })} /></Field>
 
       <div className="flex flex-wrap gap-1">
         <Toggle on={s.bold} onClick={() => set({ bold: !s.bold })} label="Bold"><Bold /></Toggle>
@@ -604,10 +604,10 @@ function CaptionInspector({ caption, onChange, onDelete, onApplyAll, onSeek }: {
         <ColorField label="Text colour" value={s.color} onChange={(v) => set({ color: v })} />
         <ColorField label="Outline" value={s.strokeColor} onChange={(v) => set({ strokeColor: v })} />
       </div>
-      <Field label={`Outline width · ${s.strokeWidth}px`}><Slider min={0} max={20} step={1} value={[s.strokeWidth]} onValueChange={([v]) => set({ strokeWidth: v })} /></Field>
+      <Field label={`Outline width · ${s.strokeWidth}px`}><Slider min={0} max={20} step={1} value={[s.strokeWidth]} onValueChange={([v]) => v !== undefined && set({ strokeWidth: v })} /></Field>
       <div className="grid grid-cols-2 gap-3">
         <ColorField label="Background" value={s.background} onChange={(v) => set({ background: v })} />
-        <Field label={`Opacity · ${Math.round(s.backgroundOpacity * 100)}%`}><Slider className="mt-3" min={0} max={1} step={0.05} value={[s.backgroundOpacity]} onValueChange={([v]) => set({ backgroundOpacity: v })} /></Field>
+        <Field label={`Opacity · ${Math.round(s.backgroundOpacity * 100)}%`}><Slider className="mt-3" min={0} max={1} step={0.05} value={[s.backgroundOpacity]} onValueChange={([v]) => v !== undefined && set({ backgroundOpacity: v })} /></Field>
       </div>
 
       <Field label="Position">
@@ -619,10 +619,10 @@ function CaptionInspector({ caption, onChange, onDelete, onApplyAll, onSeek }: {
         <p className="mt-2 text-xs text-muted-foreground">Or drag the caption on the preview.</p>
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label={`X · ${Math.round(s.x)}%`}><Slider min={0} max={100} step={0.5} value={[s.x]} onValueChange={([v]) => set({ x: v })} /></Field>
-        <Field label={`Y · ${Math.round(s.y)}%`}><Slider min={0} max={100} step={0.5} value={[s.y]} onValueChange={([v]) => set({ y: v })} /></Field>
+        <Field label={`X · ${Math.round(s.x)}%`}><Slider min={0} max={100} step={0.5} value={[s.x]} onValueChange={([v]) => v !== undefined && set({ x: v })} /></Field>
+        <Field label={`Y · ${Math.round(s.y)}%`}><Slider min={0} max={100} step={0.5} value={[s.y]} onValueChange={([v]) => v !== undefined && set({ y: v })} /></Field>
       </div>
-      <Field label={`Box width · ${s.maxWidth}%`}><Slider min={20} max={100} step={1} value={[s.maxWidth]} onValueChange={([v]) => set({ maxWidth: v })} /></Field>
+      <Field label={`Box width · ${s.maxWidth}%`}><Slider min={20} max={100} step={1} value={[s.maxWidth]} onValueChange={([v]) => v !== undefined && set({ maxWidth: v })} /></Field>
 
       <Field label="Animation">
         <div className="grid grid-cols-4 gap-1.5">
