@@ -38,4 +38,18 @@ describe("atomic Paddle credit-ledger wrapper", () => {
     await expect(addCredits(db, "user-1", 100, "purchase", "test", "paddle:txn-2"))
       .rejects.toThrow("Couldn't apply the credit ledger transaction.");
   });
+
+  it("requires a valid persisted balance from a no-error ledger RPC", async () => {
+    for (const data of [null, undefined, "1500", -1, 1.5]) {
+      const db = { rpc: vi.fn().mockResolvedValue({ data, error: null }) };
+      await expect(addCredits(db, "user-1", 100, "purchase", "test", "paddle:txn-confirm"))
+        .rejects.toThrow("Couldn't confirm the credit ledger transaction.");
+    }
+  });
+
+  it("accepts a confirmed integer balance for a new or idempotent transaction", async () => {
+    const db = { rpc: vi.fn().mockResolvedValue({ data: 1500, error: null }) };
+    await expect(addCredits(db, "user-1", 100, "purchase", "test", "paddle:txn-confirmed"))
+      .resolves.toBeUndefined();
+  });
 });

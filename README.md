@@ -84,3 +84,8 @@ The public Paddle webhook enforces a 1 MiB maximum raw request body while stream
 ## Sharing hardening
 
 Share-link management explicitly confirms project ownership through the authenticated request-scoped client before using the service-role client. Password success is not accepted until resetting the failed-attempt lockout state is confirmed in the database.
+
+
+## Credit-ledger confirmation
+
+Paddle credit grants now require the atomic ledger RPC to return a valid non-negative integer balance as well as a no-error result. Missing or malformed RPC output is treated as an uncertain settlement, not a successful grant.
