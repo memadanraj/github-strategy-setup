@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { confirmProjectOwnership } from "./youtube-project-ownership";
+import { resetSharePasswordLockout } from "./share-password-lockout";
 import type {
   CreateProjectShareResult,
   ListProjectSharesResult,
@@ -170,12 +171,14 @@ export const resolveProjectShare = createServerFn({ method: "POST" })
         return { ok: false, error: "Incorrect password.", passwordRequired: true };
       }
 
-      const { data: resetRow, error: resetError } = await admin.from("project_share_links")
-        .update({ failed_password_attempts: 0, locked_until: null })
-        .eq("id", share.id)
-        .select("id")
-        .maybeSingle();
-      if (resetError || !resetRow?.id) {
+      const resetConfirmed = await resetSharePasswordLockout(share.id, async (shareId) =>
+        admin.from("project_share_links")
+          .update({ failed_password_attempts: 0, locked_until: null })
+          .eq("id", shareId)
+          .select("id")
+          .maybeSingle(),
+      );
+      if (!resetConfirmed) {
         console.error("Share password lockout reset could not be confirmed.");
         return {
           ok: false,
